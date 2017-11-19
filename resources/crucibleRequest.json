@@ -1,0 +1,17 @@
+{
+  "reviewData" : {
+    "projectKey" : "${crucibleProjectKey}",
+    "name" : "${commitMessage}",
+    "state" : "Review",
+    "type" : "REVIEW",
+    "allowReviewersToJoin" : true,
+    "metricsVersion" : 4,
+    "jiraIssueKey" : "${issueId}"
+  },
+  "changesets" : {
+    "changesetData" : [ {
+      "id" : "${commitId}"
+    } ],
+    "repository" : "${repositoryName}"
+  }
+}
