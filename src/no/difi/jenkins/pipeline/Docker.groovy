@@ -22,6 +22,14 @@ boolean stackSupported() {
     return true
 }
 
+boolean buildSupported() {
+    if (!new File("${env.WORKSPACE}/docker/build").exists()) {
+        echo "Project has no docker/build script"
+        return false
+    }
+    return true
+}
+
 Map servicePorts(def sshKey, def user, def host, def stackName, String...services) {
     String dockerHostFile = newDockerHostFile()
     setupSshTunnel(sshKey, dockerHostFile, user, host)
@@ -34,8 +42,14 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
     return portMap
 }
 
-void build(def version, def registryUser, def registryPassword) {
-    sh "docker/build deliver ${version} ${registryUser} ${registryPassword}"
+void build(def version, def dockerRegistry) {
+    withCredentials([usernamePassword(
+            credentialsId: dockerRegistry,
+            passwordVariable: 'dockerRegistryPassword',
+            usernameVariable: 'dockerRegistryUsername')]
+    ) {
+        sh "docker/build deliver ${version} ${env.dockerRegistryUsername} ${env.dockerRegistryPassword}"
+    }
 }
 
 void verify() {

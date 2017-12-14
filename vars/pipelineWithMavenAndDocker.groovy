@@ -179,12 +179,8 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        withCredentials([usernamePassword(
-                                credentialsId: params.dockerRegistry,
-                                passwordVariable: 'dockerRegistryPassword',
-                                usernameVariable: 'dockerRegistryUsername')]
-                        ) {
-                            dockerClient.build env.version, env.dockerRegistryUsername, env.dockerRegistryPassword
+                        if (dockerClient.buildSupported()) {
+                            dockerClient.build env.version, params.dockerRegistry
                         }
                     }
                 }
@@ -224,8 +220,8 @@ def call(body) {
                         if (aws.infrastructureSupported()) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
                             dockerClient.createStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
-                        } else if (dockerClient.stackSupported()) {
-                            env.stackName = UUID.randomUUID()
+                        } else if (dockerClient.stackSupported() && params.verificationHostName?.equals('eid-test01.dmz.local')) {
+                            env.stackName = new Random().nextLong().abs()
                             dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
                         }
                     }
@@ -327,14 +323,16 @@ def call(body) {
                     }
                 }
                 environment {
+                    dockerHub = credentials('dockerHub')
                     artifactory = credentials('artifactory-publish')
                 }
                 steps {
                     failIfJobIsAborted()
                     script {
                         git.checkoutVerificationBranch()
-                        maven.deployJava(env.version, params.MAVEN_OPTS,
-                                "http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local", env.artifactory_USR, env.artifactory_PSW
+                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS,
+                                'docker.io', env.dockerHub_USR, env.dockerHub_PSW,
+                                'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local', env.artifactory_USR, env.artifactory_PSW
                         )
                     }
                 }

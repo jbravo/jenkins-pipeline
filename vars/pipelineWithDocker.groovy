@@ -134,13 +134,7 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        withCredentials([usernamePassword(
-                                credentialsId: params.dockerRegistry,
-                                passwordVariable: 'dockerRegistryPassword',
-                                usernameVariable: 'dockerRegistryUsername')]
-                        ) {
-                            dockerClient.build env.version, env.dockerRegistryUsername, env.dockerRegistryPassword
-                        }
+                        dockerClient.build env.version, params.dockerRegistry
                     }
                 }
                 post {
@@ -180,7 +174,7 @@ def call(body) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
                             dockerClient.createStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
                         } else if (dockerClient.stackSupported()) {
-                            env.stackName = UUID.randomUUID()
+                            env.stackName = new Random().nextLong().abs()
                             dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
                         }
                     }
