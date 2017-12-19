@@ -22,6 +22,10 @@ boolean stackSupported() {
     return true
 }
 
+boolean automaticVerificationSupported(def verificationHostName) {
+    stackSupported() && verificationHostName?.equals('eid-test01.dmz.local')
+}
+
 boolean buildSupported() {
     if (!new File("${env.WORKSPACE}/docker/build").exists()) {
         echo "Project has no docker/build script"

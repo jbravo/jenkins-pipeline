@@ -177,7 +177,7 @@ def call(body) {
                         if (aws.infrastructureSupported()) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
                             dockerClient.createStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
-                        } else if (dockerClient.stackSupported() && params.verificationHostName?.equals('eid-test01.dmz.local')) {
+                        } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                             env.stackName = new Random().nextLong().abs()
                             dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
                         }
@@ -190,7 +190,7 @@ def call(body) {
                             git.deleteVerificationBranch(params.gitSshKey)
                             if (aws.infrastructureSupported()) {
                                 aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.stackSupported()) {
+                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
                             dockerClient.deletePublished env.version, params.dockerRegistry
@@ -202,7 +202,7 @@ def call(body) {
                             git.deleteVerificationBranch(params.gitSshKey)
                             if (aws.infrastructureSupported()) {
                                 aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.stackSupported()) {
+                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
                             dockerClient.deletePublished env.version, params.dockerRegistry
@@ -232,7 +232,7 @@ def call(body) {
                         script {
                             if (aws.infrastructureSupported()) {
                                 aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.stackSupported()) {
+                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
                         }
