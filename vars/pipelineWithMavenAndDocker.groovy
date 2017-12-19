@@ -180,7 +180,7 @@ def call(body) {
                     script {
                         git.checkoutVerificationBranch()
                         if (dockerClient.buildSupported()) {
-                            dockerClient.build env.version, params.dockerRegistry
+                            dockerClient.buildAndPublish env.version, params.dockerRegistry
                         }
                     }
                 }
@@ -188,12 +188,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -236,6 +238,7 @@ def call(body) {
                             } else if (dockerClient.stackSupported()) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                     aborted {
@@ -247,6 +250,7 @@ def call(body) {
                             } else if (dockerClient.stackSupported()) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                 }
@@ -298,12 +302,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -340,12 +346,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -387,12 +395,18 @@ def call(body) {
                         }
                     }
                     failure {
+                        script {
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            maven.deletePublished env.version
+                        }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
-                        script { maven.deleteArtifacts env.version }
                     }
                     aborted {
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
-                        script { maven.deleteArtifacts env.version }
+                        script {
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            maven.deletePublished env.version
+                        }
                     }
                 }
             }

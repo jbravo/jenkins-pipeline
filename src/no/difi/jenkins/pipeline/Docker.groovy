@@ -42,13 +42,36 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
     return portMap
 }
 
-void build(def version, def dockerRegistry) {
+void buildAndPublish(def version, def dockerRegistry) {
     withCredentials([usernamePassword(
             credentialsId: dockerRegistry,
             passwordVariable: 'dockerRegistryPassword',
             usernameVariable: 'dockerRegistryUsername')]
     ) {
         sh "docker/build deliver ${version} ${env.dockerRegistryUsername} ${env.dockerRegistryPassword}"
+    }
+}
+
+void deletePublished(def version, def registry) {
+    withCredentials([usernamePassword(
+            credentialsId: registry,
+            passwordVariable: 'password',
+            usernameVariable: 'username')]
+    ) {
+        echo "Deleting published Docker images..."
+        new File("${WORKSPACE}/docker").eachDir { dir ->
+            String imageName = dir.getName()
+            echo "Deleting image ${imageName}"
+            String registryUrl = registryUrl registry
+            if (registryUrl == null) {
+                echo "Registry ${registry} not supported for deletion"
+                return
+            }
+            sh returnStatus: true, script: """
+              digest=\$(curl -sSf -o /dev/null -D - -u '${env.username}:${env.password}' -H 'Accept:application/vnd.docker.distribution.manifest.v2+json' ${registryUrl}/repository/docker/v2/${imageName}/manifests/${version} | grep Docker-Content-Digest | cut -d' ' -f2)
+              curl -sSf -u '${env.username}:${env.password}' -X DELETE ${registryUrl}/repository/docker/v2/${imageName}/manifests/\${digest}
+            """
+        }
     }
 }
 
@@ -68,4 +91,11 @@ private static String newDockerHostFile() {
 
 private static String dockerHost(String dockerHostFile) {
     "unix://${dockerHostFile}"
+}
+
+private static String registryUrl(def registry) {
+    switch (registry) {
+        case 'nexus': return 'http://eid-nexus01.dmz.local:8080'
+        default: return null
+    }
 }

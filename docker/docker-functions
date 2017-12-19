@@ -8,7 +8,7 @@ buildImage() {
     (
         # Run in sub shell so directory change does not affect caller
         cd "docker/${imageName}"
-        docker build --pull ${options} -t ${registry}/${imageName}:${version} . || { >&2 echo "Failed to build image ${imageName}"; return 1; }
+        docker build --pull ${options} -t ${registry#docker.io/}/${imageName}:${version} . || { >&2 echo "Failed to build image ${imageName}"; return 1; }
     )
 }
 
@@ -18,14 +18,14 @@ pushImage() {
     local version=$3
     local username=$4
     local password=$5
-    docker login ${registry} -u "${username}" -p "${password}" || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; return 1; }
-    docker push ${registry}/${imageName}:${version} || { >&2 echo "Failed to push image ${imageName}"; return 1; }
-    docker logout ${registry}; return 0
+    docker login ${registry/docker.io\/*/} -u "${username}" -p "${password}" || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; return 1; }
+    docker push ${registry#docker.io/}/${imageName}:${version} || { >&2 echo "Failed to push image ${imageName}"; return 1; }
+    docker logout ${registry/docker.io\/*/}; return 0
 }
 
 removeImage() {
     local registry=$1
     local imageName=$2
     local version=$3
-    docker rmi ${registry}/${imageName}:${version} || { >&2 echo "Failed to remove image ${imageName}"; return 1; }
+    docker rmi ${registry#docker.io/}/${imageName}:${version} || { >&2 echo "Failed to remove image ${imageName}"; return 1; }
 }

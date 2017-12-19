@@ -54,7 +54,7 @@ void runSystemTests(def verificationHostSshKey, def verificationHostUser, def ve
     """
 }
 
-void deleteArtifacts(def version) {
+void deletePublished(def version) {
     try {
         echo "Deleting artifacts for rejected version ${version}"
         url = "http://eid-artifactory.dmz.local:8080/artifactory/api/search/gavc?v=${version}&repos=libs-release-local"
