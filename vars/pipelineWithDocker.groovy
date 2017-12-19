@@ -82,8 +82,14 @@ def call(body) {
                     failIfJobIsAborted()
                 }
                 post {
-                    failure { transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK }
-                    aborted { transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK }
+                    failure {
+                        transitionIssue '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                    aborted {
+                        transitionIssue '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
                 }
             }
             stage('Prepare verification') {
