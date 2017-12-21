@@ -8,31 +8,42 @@ String readCommitMessage() {
     sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
 }
 
-String currentVerificationBranch(def sshKey) {
+void waitForAvailableVerificationSlot(def sshKey) {
     sshagent([sshKey]) {
-        String branch = sh returnStdout: true, script: """
-        #!/usr/bin/env bash
-        set +e
-    
-        output=\$(git ls-remote --heads --exit-code origin verify/\\*)
-        [[ \$? -eq 2 ]] || {
-            pattern="[0-9a-z]+[[:space:]]+refs/heads/verify/(.*)"
-            [[ \${output} =~ \${pattern} ]]
-            echo \${BASH_REMATCH[1]}
+        while (true) {
+            def currentBranchUnderVerification = currentBranchUnderVerification(sshKey)
+            if (currentBranchUnderVerification == env.BRANCH_NAME) {
+                echo "Verification branch from previous build was not deleted. Fixing..."
+                deleteVerificationBranch(sshKey)
+            } else if (currentBranchUnderVerification != null) {
+                echo "Branch ${currentBranchUnderVerification} is using the verification slot. Waiting 10 seconds..."
+                sleep 10
+            } else {
+                echo "Verification slot is available"
+                return
+            }
         }
-        """
-        branch.trim().isEmpty() ? null : branch.trim()
     }
 }
 
+private String currentBranchUnderVerification(def sshKey) {
+    def output = sh returnStdout: true, script: "git ls-remote --heads origin verify/\\*"
+    if (output.trim().isEmpty()) return null
+    (output =~ /[0-9a-z]+\s+refs\/heads\/verify\/(.*)/)[0][1]
+}
+
+String verificationBranch() {
+    "verify/${env.BRANCH_NAME}"
+}
+
 void checkoutVerificationBranch() {
-    sh "git checkout verify/\${BRANCH_NAME}"
-    sh "git reset --hard origin/verify/\${BRANCH_NAME}"
+    sh "git checkout ${verificationBranch()}"
+    sh "git reset --hard origin/${verificationBranch()}"
 }
 
 void deleteVerificationBranch(def sshKey) {
     echo "Deleting verification branch"
-    sshagent([sshKey]) { sh "git push origin --delete verify/\${BRANCH_NAME}" }
+    sshagent([sshKey]) { sh "git push origin --delete ${verificationBranch()}" }
 }
 
 void deleteWorkBranch(def sshKey) {
