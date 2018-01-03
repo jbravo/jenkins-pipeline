@@ -1,6 +1,7 @@
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import no.difi.jenkins.pipeline.Git
+import no.difi.jenkins.pipeline.Crucible
 import static java.time.ZonedDateTime.now
 
 def call(String gitSshKey, String crucibleUrl, String crucibleProjectKey, String crucibleUser, String cruciblePassword) {
@@ -11,6 +12,7 @@ def call(String gitSshKey, String crucibleUrl, String crucibleProjectKey, String
     String commitId = createVerificationRevision commitMessage, gitSshKey
     String repositoryUrl = 'git remote get-url origin'.execute([], new File(pwd())).text
     String repositoryName = repositoryUrl.tokenize(':/')[-1].tokenize('.')[0].trim()
-    synchronizeCrucible crucibleUrl, repositoryName, crucibleUser, cruciblePassword
-    createReview commitId, issueSummary, issueId, crucibleUrl, repositoryName, crucibleProjectKey, crucibleUser, cruciblePassword
+    Crucible crucible = new Crucible()
+    crucible.synchronize crucibleUrl, repositoryName, crucibleUser, cruciblePassword
+    crucible.createReview commitId, issueSummary, issueId, crucibleUrl, repositoryName, crucibleProjectKey, crucibleUser, cruciblePassword
 }

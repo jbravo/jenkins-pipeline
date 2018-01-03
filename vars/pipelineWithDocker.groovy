@@ -108,7 +108,7 @@ def call(body) {
                     }
                 }
                 steps {
-                    prepareVerification params.gitSshKey, params.crucibleUrl, params.crucibleProjectKey, env.crucible_USR, env.crucible_PSW
+                    prepareVerification params.gitSshKey, env.CRUCIBLE_URL, env.CRUCIBLE_PROJECT_KEY, env.crucible_USR, env.crucible_PSW
                 }
                 post {
                     failure {
