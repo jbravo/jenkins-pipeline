@@ -10,6 +10,7 @@ def call(body) {
     Git git = new Git()
     Maven maven = new Maven()
     Map params= [:]
+    params.parallelMavenDeploy = true
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -149,7 +150,7 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS,
+                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
                                 'docker.io', env.dockerHub_USR, env.dockerHub_PSW,
                                 'http://nexus:8081/repository/maven-releases', env.nexus_USR, env.nexus_PSW
                         )
@@ -342,7 +343,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         git.checkoutVerificationBranch()
-                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS,
+                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
                                 'docker.io', env.dockerHub_USR, env.dockerHub_PSW,
                                 'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local', env.artifactory_USR, env.artifactory_PSW
                         )
