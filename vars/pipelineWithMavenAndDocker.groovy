@@ -278,7 +278,7 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (maven.systemTestsSupported())
+                        if (maven.systemTestsSupported() && dockerClient.automaticVerificationSupported(params.verificationHostName))
                             maven.runSystemTests params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                         // TODO: Support the system tests for poc-statistics
                         //node1 = "statistics-${env.version}-node1"
