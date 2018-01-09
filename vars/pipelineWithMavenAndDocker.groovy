@@ -32,7 +32,7 @@ def call(body) {
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
                              '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -76,7 +76,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -108,7 +108,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -143,7 +143,7 @@ def call(body) {
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
                              '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -179,7 +179,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -219,7 +219,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -271,7 +271,7 @@ def call(body) {
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
                              '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -331,7 +331,7 @@ def call(body) {
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
                              '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -379,7 +379,7 @@ def call(body) {
                         label 'slave'
                         image 'difi/jenkins-agent'
                         args '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -431,7 +431,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
@@ -462,7 +462,7 @@ def call(body) {
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
                              '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '-v /var/jenkins_home/.ssh/known_hosts:/root/.ssh/known_hosts ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
                              '-u root:root'
                     }
                 }
