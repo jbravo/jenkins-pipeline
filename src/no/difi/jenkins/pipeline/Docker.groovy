@@ -70,20 +70,23 @@ void deletePublished(def version, def registry) {
             usernameVariable: 'username')]
     ) {
         echo "Deleting published Docker images..."
-        new File("${WORKSPACE}/docker").eachDir { dir ->
-            String imageName = dir.getName()
+        String registryUrl = registryUrl registry
+        if (registryUrl == null) {
+            echo "Registry ${registry} not supported for deletion"
+            return
+        }
+        imageNames().each { imageName ->
             echo "Deleting image ${imageName}"
-            String registryUrl = registryUrl registry
-            if (registryUrl == null) {
-                echo "Registry ${registry} not supported for deletion"
-                return
-            }
             sh returnStatus: true, script: """
               digest=\$(curl -sSf -o /dev/null -D - -u '${env.username}:${env.password}' -H 'Accept:application/vnd.docker.distribution.manifest.v2+json' ${registryUrl}/repository/docker/v2/${imageName}/manifests/${version} | grep Docker-Content-Digest | cut -d' ' -f2)
               curl -sSf -u '${env.username}:${env.password}' -X DELETE ${registryUrl}/repository/docker/v2/${imageName}/manifests/\${digest}
             """
         }
     }
+}
+
+private List<String> imageNames() {
+    sh returnStdout: true, script: "find ${WORKSPACE}/docker -maxdepth 1 -mindepth 1 -type d -exec basename {} \\;".split("\\s+")
 }
 
 void verify() {
