@@ -50,7 +50,7 @@ void createVerificationBranch(String logEntry, String sshKey) {
             git fetch origin \$(__masterBranch) >&2 || { __fail "Failed to update remote tracking master branch"; return 1; }
             git branch --contains origin/\$(__masterBranch) | grep ${BRANCH_NAME} > /dev/null \
                 || { >&2 echo "Current branch does not contain entire master branch. Implicit merge will be performed"; }
-            local author=\$(git --no-pager show -s --format='%an <%ae>' ${BRANCH_NAME}) || { __fail "Failed to extract author"; return 1; }
+            local author="\$(git --no-pager show -s --format='%an <%ae>' ${BRANCH_NAME})" || { __fail "Failed to extract author"; return 1; }
             local tmpBranch=\$(date +%s | sha256sum | base64 | head -c 32) || { __fail "Failed to generate UUID for temporary branch name"; return 1; }
             git checkout -b \${tmpBranch} origin/\$(__masterBranch) >/dev/null || { __fail "Failed to create verification branch"; return 1; }
             git config --local user.name 'Jenkins'

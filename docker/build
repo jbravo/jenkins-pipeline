@@ -9,9 +9,10 @@ verify() {
 
 deliver() {
     [[ $# -eq 3 ]] || { >&2 echo "Usage: $0 $FUNCNAME VERSION USERNAME PASSWORD"; return 1; }
-    local version=$1
+    local version='latest'
     local username=$2
     local password=$3
+    echo "Note: Ignoring version, using 'latest'"
     buildImage docker.io/difi jenkins-agent ${version} || return 1
     pushImage docker.io/difi jenkins-agent ${version} "${username}" "${password}" || return 1
 }
