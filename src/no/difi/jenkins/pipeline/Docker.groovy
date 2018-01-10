@@ -34,13 +34,20 @@ boolean buildSupported() {
     return true
 }
 
+boolean serviceExists(def stackName, String service, String dockerHost) {
+    0 == sh(returnStatus: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect ${stackName}_${service} > /dev/null")
+}
+
 Map servicePorts(def sshKey, def user, def host, def stackName, String...services) {
     String dockerHostFile = newDockerHostFile()
     setupSshTunnel(sshKey, dockerHostFile, user, host)
+    String dockerHost = dockerHost dockerHostFile
     def portMap = new HashMap()
     services.each { service ->
-        String port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker service inspect --format='{{with index .Endpoint.Ports 0}}{{.PublishedPort}}{{end}}' ${stackName}_${service}").trim()
-        portMap.put(service, port)
+        if (serviceExists(stackName, service, dockerHost)) {
+            String port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{with index .Endpoint.Ports 0}}{{.PublishedPort}}{{end}}' ${stackName}_${service}").trim()
+            portMap.put(service, port)
+        }
     }
     new File(dockerHostFile).delete()
     return portMap
