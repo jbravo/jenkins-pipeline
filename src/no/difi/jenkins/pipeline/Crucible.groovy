@@ -4,8 +4,7 @@ import groovy.text.SimpleTemplateEngine
 
 void synchronize(String crucibleUrl, String repositoryName, String username, String password) {
     echo "Waiting for incremental indexing to complete..."
-    sh """
-    #!/usr/bin/env bash    
+    sh """#!/usr/bin/env bash    
     statusCode=\$(curl \
         -XPUT \
         -u "${username}:${password}" \
@@ -23,8 +22,7 @@ void synchronize(String crucibleUrl, String repositoryName, String username, Str
 void createReview(String commitId, String issueSummary, String issueId, String crucibleUrl, String crucibleRepository, String crucibleProjectKey, String username, String password) {
     String request = request commitId, issueSummary, issueId, crucibleProjectKey, crucibleRepository
     echo "Creating review on ${crucibleUrl} using the following request:\n${request}"
-    sh """
-    #!/usr/bin/env bash    
+    sh """#!/usr/bin/env bash    
     statusCode=\$(curl \
         -u '${username}:${password}' \
         -H 'Content-Type: application/json' \

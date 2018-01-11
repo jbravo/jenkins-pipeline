@@ -11,8 +11,7 @@ void deploy(def version, def sshKey, def puppetModules, def librarianModules, de
 
 private void tagPuppetModules(version) {
     println "Tagging Puppet modules with ${version}"
-    sh """
-    #!/usr/bin/env bash
+    sh """#!/usr/bin/env bash
     
     tagRepo() {
         local repo=\$1
@@ -33,8 +32,7 @@ private void tagPuppetModules(version) {
 private void updateHiera(environment, version, modules) {
     println "Updating version of modules ${modules} to ${version} for environment ${environment}"
 
-    sh """
-    #!/usr/bin/env bash
+    sh """#!/usr/bin/env bash
     
     updateVersions() {
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
@@ -60,8 +58,7 @@ private void updateHiera(environment, version, modules) {
 private void updateControl(environment, version, modules) {
     println "Updating version of modules ${modules} to ${version} for environment ${environment}"
 
-    sh """
-    #!/usr/bin/env bash
+    sh """#!/usr/bin/env bash
 
     updateControl() {
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
@@ -89,8 +86,7 @@ private void deployToSystest(librarianModules, applyParametersList) {
     def librarianFolder = '/etc/puppet/environments/systest'
     def hieraFolder = '/etc/puppet/hieradata'
 
-    sh """
-    #!/usr/bin/env bash
+    sh """#!/usr/bin/env bash
 
     updateMaster() {
         ssh -tt -o StrictHostKeyChecking=no jenkins@${masterHost} \
@@ -110,8 +106,7 @@ private void deployToSystest(librarianModules, applyParametersList) {
     applyParametersList.each { parameters ->
         String host = parameters.tokenize().getAt(0)
         String moduleList = parameters.tokenize().getAt(1)
-        sh """
-        #!/usr/bin/env bash
+        sh """#!/usr/bin/env bash
         set +e
 
         apply() {

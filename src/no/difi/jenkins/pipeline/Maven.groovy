@@ -7,7 +7,7 @@ void verify(def options) {
     String settingsFile = settingsFile()
     env.MAVEN_OPTS = options ?: ""
     sh "mvn clean verify -B -s ${settingsFile}"
-    new File(settingsFile).delete()
+    sh "rm ${settingsFile}"
 }
 
 void deployDockerAndJava(
@@ -21,7 +21,7 @@ void deployDockerAndJava(
     String parallelOptions = parallel ? "-T 1C" : ""
     sh "mvn versions:set -B -DnewVersion=${version}"
     sh "mvn deploy -DdeployAtEnd=true -DaltDeploymentRepository=javaRepository::default::${javaRepository} -B ${parallelOptions} -s ${settingsFile}"
-    new File(settingsFile).delete()
+    sh "rm ${settingsFile}"
 }
 
 void deployJava(
@@ -33,11 +33,18 @@ void deployJava(
     env.MAVEN_OPTS = mavenOptions ?: ""
     sh "mvn versions:set -B -DnewVersion=${version}"
     sh "mvn deploy -B -T 1C -DdeployAtEnd=true -DaltDeploymentRepository=javaRepository::default::${javaRepository} -s ${settingsFile}"
-    new File(settingsFile).delete()
+    sh "rm ${settingsFile}"
 }
 
 boolean systemTestsSupported() {
-    new File("${WORKSPACE}/system-tests").exists()
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/system-tests ]")
+    if (status == 0) {
+        echo "System tests are supported"
+        return true
+    } else {
+        echo "System tests are not supported"
+        return false
+    }
 }
 
 void runSystemTests(def verificationHostSshKey, def verificationHostUser, def verificationHostName, def stackName) {

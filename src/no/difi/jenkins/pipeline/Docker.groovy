@@ -3,23 +3,24 @@ package no.difi.jenkins.pipeline
 void createStack(def sshKey, def user, def host, def stackName, def version) {
     String dockerHostFile = newDockerHostFile()
     setupSshTunnel(sshKey, dockerHostFile, user, host)
-    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker/run ${stackName} ${version}"
-    new File(dockerHostFile).delete()
+    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
 }
 
 void removeStack(def sshKey, def user, def host, def stackName) {
     String dockerHostFile = newDockerHostFile()
     setupSshTunnel(sshKey, dockerHostFile, user, host)
-    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}"
-    new File(dockerHostFile).delete()
+    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}; rm ${dockerHostFile}"
 }
 
 boolean stackSupported() {
-    if (!new File("${env.WORKSPACE}/docker/stack.yml").exists()) {
-        echo "Project has no Docker compose file (docker/stack.yml)"
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/stack.yml ]")
+    if (status == 0) {
+        echo "Docker stack is supported"
+        return true
+    } else {
+        echo "Docker stack is not supported"
         return false
     }
-    return true
 }
 
 boolean automaticVerificationSupported(def verificationHostName) {
@@ -27,11 +28,14 @@ boolean automaticVerificationSupported(def verificationHostName) {
 }
 
 boolean buildSupported() {
-    if (!new File("${env.WORKSPACE}/docker/build").exists()) {
-        echo "Project has no docker/build script"
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build ]")
+    if (status == 0) {
+        echo "Docker builds are supported"
+        return true
+    } else {
+        echo "Docker builds are not supported"
         return false
     }
-    return true
 }
 
 boolean serviceExists(def stackName, String service, String dockerHost) {
@@ -49,7 +53,7 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
             portMap.put(service, port)
         }
     }
-    new File(dockerHostFile).delete()
+    sh "rm ${dockerHostFile}"
     return portMap
 }
 

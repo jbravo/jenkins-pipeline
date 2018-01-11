@@ -33,8 +33,7 @@ void waitForAvailableVerificationSlot(def sshKey) {
 
 void createVerificationBranch(String logEntry, String sshKey) {
     sshagent([sshKey]) {
-        return sh(returnStdout: true, script: """
-        #!/usr/bin/env bash
+        return sh(returnStdout: true, script: """#!/usr/bin/env bash
     
         __fail() {
             local ret=\$?

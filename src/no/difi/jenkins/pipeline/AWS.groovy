@@ -30,9 +30,12 @@ def removeInfrastructure(def version, def stackName) {
 }
 
 boolean infrastructureSupported() {
-    if (!new File("${env.WORKSPACE}/docker/infrastructure").exists()) {
-        echo "Project has no infrastructure script"
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/infrastructure ]")
+    if (status == 0) {
+        echo "Infrastructure supported"
+        return true
+    } else {
+        echo "Infrastructure not supported"
         return false
     }
-    return true
 }
