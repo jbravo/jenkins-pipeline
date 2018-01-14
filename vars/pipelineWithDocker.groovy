@@ -7,6 +7,7 @@ def call(body) {
     Docker dockerClient = new Docker()
     Git git = new Git()
     Map params= [:]
+    params.stagingDockerRegistry = 'StagingLocal'
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -140,23 +141,21 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (dockerClient.buildSupported()) {
-                            dockerClient.buildAndPublish env.version, params.dockerRegistry
-                        }
+                        dockerClient.buildAndPublish env.version, params.stagingDockerRegistry
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -182,14 +181,19 @@ def call(body) {
                         git.checkoutVerificationBranch()
                         if (aws.infrastructureSupported()) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
-                            dockerClient.createStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
                         } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                             env.stackName = new Random().nextLong().abs()
-                            dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
                         }
                     }
                 }
                 post {
+                    always {
+                        script {
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                        }
+                    }
                     failure {
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                         script {
@@ -199,7 +203,6 @@ def call(body) {
                             } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                     aborted {
@@ -211,7 +214,6 @@ def call(body) {
                             } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                 }
@@ -246,14 +248,12 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -295,13 +295,42 @@ def call(body) {
                         }
                     }
                     failure {
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                    aborted {
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                }
+            }
+            stage('Publish artifacts') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true'} }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args '--network pipeline_pipeline ' +
+                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                             '-u root:root'
+                    }
+                }
+                steps {
+                    script {
+                        git.checkoutVerificationBranch()
+                        dockerClient.buildAndPublish env.version, params.dockerRegistry
+                    }
+                }
+                post {
+                    failure {
                         script {
+                            git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
+                            git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
@@ -330,7 +359,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.verificationHostName != null) {
-                            dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
                         }
                     }
                 }
@@ -359,7 +388,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.createStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
+                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
                         }
                     }
                 }

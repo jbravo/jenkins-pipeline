@@ -11,6 +11,7 @@ def call(body) {
     Maven maven = new Maven()
     Map params= [:]
     params.parallelMavenDeploy = true
+    params.stagingDockerRegistry = 'ProductionLocal' // TODO: Until introducing registry as parameter for stack.yaml
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -133,7 +134,6 @@ def call(body) {
             stage('Build artifacts') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
                 environment {
-                    dockerHub = credentials('dockerHub')
                     nexus = credentials('nexus')
                 }
                 agent {
@@ -151,7 +151,7 @@ def call(body) {
                     script {
                         git.checkoutVerificationBranch()
                         maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                'docker.io', env.dockerHub_USR, env.dockerHub_PSW,
+                                'StagingPublic',
                                 'http://nexus:8081/repository/maven-releases', env.nexus_USR, env.nexus_PSW
                         )
                     }
@@ -186,23 +186,21 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (dockerClient.buildSupported()) {
-                            dockerClient.buildAndPublish env.version, params.dockerRegistry
-                        }
+                        dockerClient.buildAndPublish env.version, params.stagingDockerRegistry
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -228,14 +226,19 @@ def call(body) {
                         git.checkoutVerificationBranch()
                         if (aws.infrastructureSupported()) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
-                            dockerClient.createStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stagingDockerRegistry, params.stackName, env.version
                         } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                             env.stackName = new Random().nextLong().abs()
-                            dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stagingDockerRegistry, env.stackName, env.version
                         }
                     }
                 }
                 post {
+                    always {
+                        script {
+                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                        }
+                    }
                     failure {
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                         script {
@@ -245,7 +248,6 @@ def call(body) {
                             } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                     aborted {
@@ -257,7 +259,6 @@ def call(body) {
                             } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                                 dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
                             }
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                     }
                 }
@@ -309,58 +310,12 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                        }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
-                    }
-                }
-            }
-            stage('Publish Java artifacts') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
-                agent {
-                    docker {
-                        label 'slave'
-                        image 'difi/jenkins-agent'
-                        args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
-                             '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
-                    }
-                }
-                environment {
-                    dockerHub = credentials('dockerHub')
-                    artifactory = credentials('artifactory-publish')
-                }
-                steps {
-                    failIfJobIsAborted()
-                    script {
-                        git.checkoutVerificationBranch()
-                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                'docker.io', env.dockerHub_USR, env.dockerHub_PSW,
-                                'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local', env.artifactory_USR, env.artifactory_PSW
-                        )
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                        }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
-                    }
-                    aborted {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                         }
                         transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
@@ -417,6 +372,84 @@ def call(body) {
                     }
                 }
             }
+            stage('Publish Java artifacts') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
+                             '--network pipeline_pipeline ' +
+                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                             '-u root:root'
+                    }
+                }
+                environment {
+                    artifactory = credentials('artifactory-publish')
+                }
+                steps {
+                    failIfJobIsAborted()
+                    script {
+                        git.checkoutVerificationBranch()
+                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
+                                params.dockerRegistry,
+                                'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local', env.artifactory_USR, env.artifactory_PSW
+                        )
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                        }
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                    aborted {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                        }
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                }
+            }
+            stage('Publish Docker images') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true'} }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args '--network pipeline_pipeline ' +
+                                '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                '-u root:root'
+                    }
+                }
+                steps {
+                    script {
+                        git.checkoutVerificationBranch()
+                        dockerClient.buildAndPublish env.version, params.dockerRegistry
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                        }
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                    aborted {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished env.version, params.dockerRegistry
+                        }
+                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                    }
+                }
+            }
             stage('Wait for manual verification to start') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
                 steps {
@@ -441,7 +474,7 @@ def call(body) {
                         if (params.puppetModules != null) {
                             new Puppet().deploy env.version, params.verificationHostSshKey, params.puppetModules, params.librarianModules, params.puppetApplyList
                         } else if (dockerClient.stackSupported() && params.verificationHostName != null) {
-                            dockerClient.createStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
                         }
                     }
                 }
@@ -470,7 +503,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.createStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
+                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
                         }
                     }
                 }

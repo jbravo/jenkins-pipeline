@@ -1,9 +1,29 @@
 package no.difi.jenkins.pipeline
 
-void createStack(def sshKey, def user, def host, def stackName, def version) {
+void deployStack(def sshKey, def user, def host, def registry, def stackName, def version) {
     String dockerHostFile = newDockerHostFile()
+    String dockerHost = dockerHost dockerHostFile
     setupSshTunnel(sshKey, dockerHostFile, user, host)
-    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/run ]")
+    if (status == 0) {
+        sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
+    } else {
+        String registryAddress = registryAddress registry
+        sh """#!/usr/bin/env bash
+        export DOCKER_TLS_VERIFY=
+        export DOCKER_HOST=${dockerHost}
+        export REGISTRY=${registryAddress}
+        export VERSION=${version}
+        rc=1
+        docker stack deploy -c docker/stack.yml ${stackName} || exit 1
+        for i in \$(seq 1 100); do
+            docker stack services ${stackName} --format '{{.Name}}:{{.Replicas}}' | grep -vE ':([0-9]+)/\\1' || { rc=0; break; }
+            sleep 5
+        done
+        rm ${dockerHostFile}
+        exit \${rc}
+        """
+    }
 }
 
 void removeStack(def sshKey, def user, def host, def stackName) {
@@ -27,17 +47,6 @@ boolean automaticVerificationSupported(def verificationHostName) {
     stackSupported() && verificationHostName?.equals('eid-test01.dmz.local')
 }
 
-boolean buildSupported() {
-    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build ]")
-    if (status == 0) {
-        echo "Docker builds are supported"
-        return true
-    } else {
-        echo "Docker builds are not supported"
-        return false
-    }
-}
-
 boolean serviceExists(def stackName, String service, String dockerHost) {
     0 == sh(returnStatus: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect ${stackName}_${service} > /dev/null")
 }
@@ -57,44 +66,96 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
     return portMap
 }
 
-void buildAndPublish(def version, def dockerRegistry) {
+void buildAndPublish(def version, def registry) {
     withCredentials([usernamePassword(
-            credentialsId: dockerRegistry,
-            passwordVariable: 'dockerRegistryPassword',
-            usernameVariable: 'dockerRegistryUsername')]
+            credentialsId: credentialsId(registry),
+            passwordVariable: 'registryPassword',
+            usernameVariable: 'registryUsername')]
     ) {
-        sh "docker/build deliver ${version} ${env.dockerRegistryUsername} ${env.dockerRegistryPassword}"
+
+        String registryAddress = registryAddress registry
+        if (0 == sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build-images ]")) {
+            echo "Using project specific script to build images"
+            sh "docker/build-images ${registryAddress} ${version}"
+            pushAll registryAddress, version, env.registryUsername, env.registryPassword
+            removeAll(registryAddress, version)
+        } else if (0 == sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build ]")) {
+            echo "Using legacy script to build images -- no staging support for images"
+            sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
+        } else {
+            buildAll(registryAddress, version)
+            pushAll(registryAddress, version, env.registryUsername, env.registryPassword)
+            removeAll(registryAddress, version)
+        }
     }
 }
 
 void deletePublished(def version, def registry) {
+    echo "Deleting published Docker images with version ${version} from registry ${registry}..."
     withCredentials([usernamePassword(
-            credentialsId: registry,
-            passwordVariable: 'password',
-            usernameVariable: 'username')]
+            credentialsId: credentialsId(registry),
+            passwordVariable: 'registryPassword',
+            usernameVariable: 'registryUsername')]
     ) {
-        echo "Deleting published Docker images..."
-        String registryUrl = registryUrl registry
-        if (registryUrl == null) {
+        String registryApiUrl = registryApiUrl registry
+        if (registryApiUrl == null || registryApiUrl.trim().isEmpty()) {
             echo "Registry ${registry} not supported for deletion"
             return
         }
         imageNames().each { imageName ->
             echo "Deleting image ${imageName}"
             sh returnStatus: true, script: """
-              digest=\$(curl -sSf -o /dev/null -D - -u '${env.username}:${env.password}' -H 'Accept:application/vnd.docker.distribution.manifest.v2+json' ${registryUrl}/repository/docker/v2/${imageName}/manifests/${version} | grep Docker-Content-Digest | cut -d' ' -f2)
-              curl -sSf -u '${env.username}:${env.password}' -X DELETE ${registryUrl}/repository/docker/v2/${imageName}/manifests/\${digest}
+                digest=\$(curl -sSf -o /dev/null -D - -u '${env.registryUsername}:${env.registryPassword}' -H 'Accept:application/vnd.docker.distribution.manifest.v2+json' ${registryApiUrl}/v2/${imageName}/manifests/${version} | grep Docker-Content-Digest | cut -d' ' -f2)
+                digest=\${digest%[\$'\t\r\n']}
+                curl -sSf -u '${env.registryUsername}:${env.registryPassword}' -X DELETE ${registryApiUrl}/v2/${imageName}/manifests/\${digest}
             """
         }
     }
 }
 
 private List<String> imageNames() {
-    sh returnStdout: true, script: "find ${WORKSPACE}/docker -maxdepth 1 -mindepth 1 -type d -exec basename {} \\;".split("\\s+")
+    sh(returnStdout: true, script: "find ${WORKSPACE}/docker -maxdepth 1 -mindepth 1 -type d -exec basename {} \\;").split("\\s+")
 }
 
 void verify() {
-    sh "docker/build verify"
+    buildAll("verify", System.currentTimeMillis())
+}
+
+void buildAll(String registry, def tag) {
+    imageNames().each { imageName ->
+        buildImage(registry, imageName, tag)
+    }
+}
+
+void pushAll(String registry, def tag, def username, def password) {
+    imageNames().each { imageName ->
+        push(registry, imageName, tag, username, password)
+    }
+}
+
+void removeAll(String registry, def tag) {
+    imageNames().each { imageName ->
+        removeImage(registry, imageName, tag)
+    }
+}
+
+void push(String registry, String imageName, def tag, def username, def password) {
+    sh """#!/usr/bin/env bash
+    echo "Logging in to registry ${registry}..."
+    echo "${password}" | docker login ${registry} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
+    echo "Pushing image ${registry}/${imageName}:${tag}..."
+    docker push ${registry}/${imageName}:${tag} || { >&2 echo "Failed to push image ${imageName}"; exit 1; }
+    echo "Logging out from registry ${registry}..."
+    docker logout ${registry}; exit 0
+    """
+}
+
+void buildImage(String registry, String imageName, def tag) {
+    sh "docker build -t ${registry}/${imageName}:${tag} ${WORKSPACE}/docker/${imageName}"
+}
+
+void removeImage(String registry, String imageName, def tag) {
+    sh "docker rmi ${registry}/${imageName}:${tag}"
 }
 
 private void setupSshTunnel(def sshKey, def dockerHostFile, def user, def host) {
@@ -111,9 +172,54 @@ private static String dockerHost(String dockerHostFile) {
     "unix://${dockerHostFile}"
 }
 
-private static String registryUrl(def registry) {
-    switch (registry) {
-        case 'nexus': return 'http://eid-nexus01.dmz.local:8080'
-        default: return null
+static String credentialsId(def registry) {
+    registry = backwardsCompatible(registry)
+    "docker_registry_${registry}"
+}
+
+private String registryAddress(def registry) {
+    echo "Looking up registry address for: ${registry}"
+    registry = backwardsCompatible(registry)
+    switch(registry) {
+        case 'StagingLocal':
+            return "${env.dockerRegistryStagingLocalAddress}"
+        case 'StagingPublic':
+            return "${env.dockerRegistryStagingPublicAddress}"
+        case 'ProductionLocal':
+            return "${env.dockerRegistryProductionLocalAddress}"
+        case 'ProductionPublic':
+            return "${env.dockerRegistryProductionPublicAddress}"
+        default:
+            return null
+    }
+}
+
+private String registryApiUrl(def registry) {
+    echo "Looking up registry API URL for: ${registry}"
+    registry = backwardsCompatible(registry)
+    switch(registry) {
+        case 'StagingLocal':
+            return "${env.dockerRegistryStagingLocalApiUrl}"
+        case 'StagingPublic':
+            return "${env.dockerRegistryStagingPublicApiUrl}"
+        case 'ProductionLocal':
+            return "${env.dockerRegistryProductionLocalApiUrl}"
+        case 'ProductionPublic':
+            return "${env.dockerRegistryProductionPublicApiUrl}"
+        default:
+            return null
+    }
+}
+
+private static String backwardsCompatible(def registry) {
+    switch(registry) {
+        case 'nexus':
+            echo 'Mapping nexus to ProductionLocal'
+            return 'ProductionLocal'
+        case 'dockerHub':
+            echo 'Mapping dockerHub to ProductionPublic'
+            return 'ProductionPublic'
+        default:
+            return registry
     }
 }

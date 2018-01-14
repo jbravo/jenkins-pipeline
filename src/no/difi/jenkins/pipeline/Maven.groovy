@@ -12,11 +12,18 @@ void verify(def options) {
 
 void deployDockerAndJava(
         def version, def mavenOptions, def parallel,
-        def dockerRegistry, def dockerUsername, def dockerPassword,
+        def dockerRegistry,
         def javaRepository, def javaUserName, def javaPassword
 ) {
     currentBuild.description = "Publishing artifacts with version ${version} from commit ${GIT_COMMIT}"
-    String settingsFile = settingsFileWithDockerAndJava dockerRegistry, dockerUsername, dockerPassword, "javaRepository", javaUserName, javaPassword
+    String settingsFile
+    withCredentials([usernamePassword(
+            credentialsId: Docker.credentialsId(dockerRegistry),
+            passwordVariable: 'dockerPassword',
+            usernameVariable: 'dockerUsername')]
+    ) {
+        settingsFile = settingsFileWithDockerAndJava dockerRegistry, env.dockerUsername, env.dockerPassword, "javaRepository", javaUserName, javaPassword
+    }
     env.MAVEN_OPTS = mavenOptions ?: ""
     String parallelOptions = parallel ? "-T 1C" : ""
     sh "mvn versions:set -B -DnewVersion=${version}"

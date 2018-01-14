@@ -1,6 +1,6 @@
+@Library('jenkins-pipeline@work/PBLEID-15492') _
+
 pipelineWithDocker {
     gitSshKey = 'ssh.github.com'
-    dockerRegistry = 'dockerHub'
-    crucibleUrl = 'http://fisheye.difi.local:8060'
-    crucibleProjectKey = 'CR'
+    dockerRegistry = 'ProductionPublic'
 }
