@@ -11,6 +11,7 @@ def call(String gitSshKey, String crucibleUrl, String crucibleProjectKey, String
     String issueId = issueId()
     String commitMessage = "${env.version}|${issueId}: ${issueSummary}".toString()
     String commitId = git.createVerificationBranch commitMessage, gitSshKey
+    git.resetVerificationBranchToOrigin() // In case there was an existing local branch from previous build
     String repositoryName = git.repositoryName()
     Crucible crucible = new Crucible()
     crucible.synchronize crucibleUrl, repositoryName, crucibleUser, cruciblePassword

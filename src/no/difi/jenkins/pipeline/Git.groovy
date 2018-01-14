@@ -84,7 +84,10 @@ String verificationBranch() {
 
 void checkoutVerificationBranch() {
     sh "git checkout ${verificationBranch()}"
-    sh "git reset --hard origin/${verificationBranch()}"
+}
+
+void resetVerificationBranchToOrigin() {
+    sh "git checkout ${verificationBranch()} && git reset --hard origin/${verificationBranch()} && git checkout -"
 }
 
 void deleteVerificationBranch(def sshKey) {

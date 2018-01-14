@@ -140,21 +140,31 @@ void removeAll(String registry, def tag) {
 }
 
 void push(String registry, String imageName, def tag, def username, def password) {
+    String pushRegistry = registry
+    String loginRegistry = registry
+    if (registry.startsWith('docker.io/')) {
+        pushRegistry = registry.substring(10)
+        loginRegistry = ""
+    }
     sh """#!/usr/bin/env bash
     echo "Logging in to registry ${registry}..."
-    echo "${password}" | docker login ${registry} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
-    echo "Pushing image ${registry}/${imageName}:${tag}..."
-    docker push ${registry}/${imageName}:${tag} || { >&2 echo "Failed to push image ${imageName}"; exit 1; }
+    echo "${password}" | docker login ${loginRegistry} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
+    echo "Pushing image ${pushRegistry}/${imageName}:${tag}..."
+    docker push ${pushRegistry}/${imageName}:${tag} || { >&2 echo "Failed to push image ${imageName}"; exit 1; }
     echo "Logging out from registry ${registry}..."
-    docker logout ${registry}; exit 0
+    docker logout ${loginRegistry}; exit 0
     """
 }
 
 void buildImage(String registry, String imageName, def tag) {
+    if (registry.startsWith('docker.io/'))
+        registry = registry.substring(10)
     sh "docker build -t ${registry}/${imageName}:${tag} ${WORKSPACE}/docker/${imageName}"
 }
 
 void removeImage(String registry, String imageName, def tag) {
+    if (registry.startsWith('docker.io/'))
+        registry = registry.substring(10)
     sh "docker rmi ${registry}/${imageName}:${tag}"
 }
 
