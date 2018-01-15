@@ -1,5 +1,7 @@
 package no.difi.jenkins.pipeline
 
+import static java.util.Collections.emptyList
+
 void deployStack(def sshKey, def user, def host, def registry, def stackName, def version) {
     String dockerHostFile = newDockerHostFile()
     String dockerHost = dockerHost dockerHostFile
@@ -114,7 +116,10 @@ void deletePublished(def version, def registry) {
 }
 
 private List<String> imageNames() {
-    sh(returnStdout: true, script: "[ -e ${WORKSPACE}/docker ] && find ${WORKSPACE}/docker -maxdepth 1 -mindepth 1 -type d -exec basename {} \\;").split("\\s+")
+    String result = sh(returnStdout: true, script: "[ -e ${WORKSPACE}/docker ] && find ${WORKSPACE}/docker -maxdepth 1 -mindepth 1 -type d -exec basename {} \\; || echo -n")
+    if (result.trim().isEmpty())
+        return emptyList()
+    return result.split("\\s+")
 }
 
 void verify() {
