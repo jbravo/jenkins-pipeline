@@ -182,7 +182,7 @@ private static String dockerHost(String dockerHostFile) {
     "unix://${dockerHostFile}"
 }
 
-static String credentialsId(def registry) {
+String credentialsId(def registry) {
     registry = backwardsCompatible(registry)
     "docker_registry_${registry}"
 }
@@ -221,7 +221,7 @@ private String registryApiUrl(def registry) {
     }
 }
 
-private static String backwardsCompatible(def registry) {
+private String backwardsCompatible(def registry) {
     switch(registry) {
         case 'nexus':
             echo 'Mapping nexus to ProductionLocal'
