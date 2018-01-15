@@ -206,7 +206,7 @@ String credentialsId(def registry) {
     "docker_registry_${registry}"
 }
 
-private String registryAddress(def registry) {
+String registryAddress(def registry) {
     echo "Looking up registry address for: ${registry}"
     registry = backwardsCompatible(registry)
     switch(registry) {

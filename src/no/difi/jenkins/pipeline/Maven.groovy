@@ -17,12 +17,13 @@ void deployDockerAndJava(
 ) {
     currentBuild.description = "Publishing artifacts with version ${version} from commit ${GIT_COMMIT}"
     String settingsFile
+    Docker docker = new Docker()
     withCredentials([usernamePassword(
-            credentialsId: new Docker().credentialsId(dockerRegistry),
+            credentialsId: docker.credentialsId(dockerRegistry),
             passwordVariable: 'dockerPassword',
             usernameVariable: 'dockerUsername')]
     ) {
-        settingsFile = settingsFileWithDockerAndJava dockerRegistry, env.dockerUsername, env.dockerPassword, "javaRepository", javaUserName, javaPassword
+        settingsFile = settingsFileWithDockerAndJava docker.registryAddress(dockerRegistry), env.dockerUsername, env.dockerPassword, "javaRepository", javaUserName, javaPassword
     }
     env.MAVEN_OPTS = mavenOptions ?: ""
     String parallelOptions = parallel ? "-T 1C" : ""
