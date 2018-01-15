@@ -6,10 +6,12 @@ void deployStack(def sshKey, def user, def host, def registry, def stackName, de
     String dockerHostFile = newDockerHostFile()
     String dockerHost = dockerHost dockerHostFile
     setupSshTunnel(sshKey, dockerHostFile, user, host)
-    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/run ]")
-    if (status == 0) {
+    if (fileExists("${WORKSPACE}/docker/run")) {
         sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
     } else {
+        if (fileExists("${WORKSPACE}/docker/run-advice")) {
+            sh "${WORKSPACE}/docker/run-advice before"
+        }
         String registryAddress = registryAddress registry
         sh """#!/usr/bin/env bash
         export DOCKER_TLS_VERIFY=
@@ -25,6 +27,9 @@ void deployStack(def sshKey, def user, def host, def registry, def stackName, de
         rm ${dockerHostFile}
         exit \${rc}
         """
+        if (fileExists("${WORKSPACE}/docker/run-advice")) {
+            sh "${WORKSPACE}/docker/run-advice after"
+        }
     }
 }
 
@@ -35,8 +40,7 @@ void removeStack(def sshKey, def user, def host, def stackName) {
 }
 
 boolean stackSupported() {
-    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/stack.yml ]")
-    if (status == 0) {
+    if (fileExists("${WORKSPACE}/docker/stack.yml")) {
         echo "Docker stack is supported"
         return true
     } else {
@@ -76,12 +80,12 @@ void buildAndPublish(def version, def registry) {
     ) {
 
         String registryAddress = registryAddress registry
-        if (0 == sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build-images ]")) {
+        if (fileExists("${WORKSPACE}/docker/build-images")) {
             echo "Using project specific script to build images"
             sh "docker/build-images ${registryAddress} ${version}"
             pushAll registryAddress, version, env.registryUsername, env.registryPassword
             removeAll(registryAddress, version)
-        } else if (0 == sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/build ]")) {
+        } else if (fileExists("${WORKSPACE}/docker/build")) {
             echo "Using legacy script to build images -- no staging support for images"
             sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
         } else {
@@ -127,9 +131,19 @@ void verify() {
 }
 
 void buildAll(String registry, def tag) {
+    if (fileExists("${WORKSPACE}/docker/build-advice")) {
+        sh "${WORKSPACE}/docker/build-advice before"
+    }
     imageNames().each { imageName ->
         buildImage(registry, imageName, tag)
     }
+    if (fileExists("${WORKSPACE}/docker/build-advice")) {
+        sh "${WORKSPACE}/docker/build-advice after"
+    }
+}
+
+private boolean fileExists(String file) {
+    0 == sh(returnStatus: true, script: "[ -e ${file} ]")
 }
 
 void pushAll(String registry, def tag, def username, def password) {
