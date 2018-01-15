@@ -18,7 +18,7 @@ void deployDockerAndJava(
     currentBuild.description = "Publishing artifacts with version ${version} from commit ${GIT_COMMIT}"
     String settingsFile
     withCredentials([usernamePassword(
-            credentialsId: Docker.credentialsId(dockerRegistry),
+            credentialsId: new Docker().credentialsId(dockerRegistry),
             passwordVariable: 'dockerPassword',
             usernameVariable: 'dockerUsername')]
     ) {
