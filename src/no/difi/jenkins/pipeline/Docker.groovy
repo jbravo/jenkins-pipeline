@@ -53,7 +53,7 @@ boolean automaticVerificationSupported(def verificationHostName) {
     stackSupported() && verificationHostName?.equals('eid-test01.dmz.local')
 }
 
-boolean serviceExists(def stackName, String service, String dockerHost) {
+private boolean serviceExists(def stackName, String service, String dockerHost) {
     0 == sh(returnStatus: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect ${stackName}_${service} > /dev/null")
 }
 
@@ -73,26 +73,20 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
 }
 
 void buildAndPublish(def version, def registry) {
-    withCredentials([usernamePassword(
-            credentialsId: credentialsId(registry),
-            passwordVariable: 'registryPassword',
-            usernameVariable: 'registryUsername')]
-    ) {
-
-        String registryAddress = registryAddress registry
-        if (fileExists("${WORKSPACE}/docker/build-images")) {
-            echo "Using project specific script to build images"
-            sh "docker/build-images ${registryAddress} ${version}"
-            pushAll registryAddress, version, env.registryUsername, env.registryPassword
-            removeAll(registryAddress, version)
-        } else if (fileExists("${WORKSPACE}/docker/build")) {
-            echo "Using legacy script to build images -- no staging support for images"
-            sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
-        } else {
-            buildAll(registryAddress, version)
-            pushAll(registryAddress, version, env.registryUsername, env.registryPassword)
-            removeAll(registryAddress, version)
-        }
+    if (imageNames().size() == 0)
+        return
+    if (fileExists("${WORKSPACE}/docker/build-images")) {
+        echo "Using project specific script to build images"
+        sh "docker/build-images ${registryAddress(registry)} ${version}"
+        pushAll registry, version
+        removeAll registry, version
+    } else if (fileExists("${WORKSPACE}/docker/build")) {
+        echo "Using legacy script to build images -- no staging support for images"
+        sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
+    } else {
+        buildAll registry, version
+        pushAll registry, version
+        removeAll registry, version
     }
 }
 
@@ -127,15 +121,16 @@ private List<String> imageNames() {
 }
 
 void verify() {
-    buildAll("verify", System.currentTimeMillis())
+    buildAll(null, null)
 }
 
-void buildAll(String registry, def tag) {
+private void buildAll(def registry, def tag) {
     if (fileExists("${WORKSPACE}/docker/build-advice")) {
         sh "${WORKSPACE}/docker/build-advice before"
     }
+    String registryAddress = registryAddress registry
     imageNames().each { imageName ->
-        buildImage(registry, imageName, tag)
+        buildImage(registryAddress, imageName, tag)
     }
     if (fileExists("${WORKSPACE}/docker/build-advice")) {
         sh "${WORKSPACE}/docker/build-advice after"
@@ -146,49 +141,59 @@ private boolean fileExists(String file) {
     0 == sh(returnStatus: true, script: "[ -e ${file} ]")
 }
 
-void pushAll(String registry, def tag, def username, def password) {
-    imageNames().each { imageName ->
-        push(registry, imageName, tag, username, password)
+private void pushAll(def registry, def tag) {
+    withCredentials([usernamePassword(
+            credentialsId: credentialsId(registry),
+            passwordVariable: 'password',
+            usernameVariable: 'username')]
+    ) {
+        String registryAddress = registryAddress registry
+        imageNames().each { imageName ->
+            push(registryAddress, imageName, tag, env.username, env.password)
+        }
     }
 }
 
-void removeAll(String registry, def tag) {
+private void removeAll(def registry, def tag) {
+    String registryAddress = registryAddress registry
     imageNames().each { imageName ->
-        removeImage(registry, imageName, tag)
+        removeImage(registryAddress, imageName, tag)
     }
 }
 
-void push(String registry, String imageName, def tag, def username, def password) {
-    String pushRegistry = registry
-    String loginRegistry = registry
-    if (registry.startsWith('docker.io/')) {
-        pushRegistry = registry.substring(10)
-        loginRegistry = ""
+private void push(String registryAddress, String imageName, def tag, def username, def password) {
+    String pushAddress = registryAddress
+    String loginAddress = registryAddress
+    if (registryAddress.startsWith('docker.io/')) {
+        pushAddress = registryAddress.substring(10)
+        loginAddress = ""
     }
     sh """#!/usr/bin/env bash
-    echo "Logging in to registry ${registry}..."
-    echo "${password}" | docker login ${loginRegistry} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
-    echo "Pushing image ${pushRegistry}/${imageName}:${tag}..."
-    docker push ${pushRegistry}/${imageName}:${tag} || { >&2 echo "Failed to push tag '${tag}' image ${imageName}"; exit 1; }
-    echo "Tagging image ${pushRegistry}/${imageName}:${tag} with tag 'latest'..."
-    docker tag ${pushRegistry}/${imageName}:${tag} ${pushRegistry}/${imageName}
-    echo "Pushing image ${pushRegistry}/${imageName}:latest..."
-    docker push ${pushRegistry}/${imageName} || { >&2 echo "Failed to push tag 'latest' for image ${imageName}"; exit 1; }
-    echo "Logging out from registry ${registry}..."
-    docker logout ${loginRegistry}; exit 0
+    echo "Logging in to registry ${registryAddress}..."
+    echo "${password}" | docker login ${loginAddress} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
+    echo "Pushing image ${pushAddress}/${imageName}:${tag}..."
+    docker push ${pushAddress}/${imageName}:${tag} || { >&2 echo "Failed to push tag '${tag}' image ${imageName}"; exit 1; }
+    echo "Tagging image ${pushAddress}/${imageName}:${tag} with tag 'latest'..."
+    docker tag ${pushAddress}/${imageName}:${tag} ${pushAddress}/${imageName}
+    echo "Pushing image ${pushAddress}/${imageName}:latest..."
+    docker push ${pushAddress}/${imageName} || { >&2 echo "Failed to push tag 'latest' for image ${imageName}"; exit 1; }
+    echo "Logging out from registry ${registryAddress}..."
+    docker logout ${loginAddress}; exit 0
     """
 }
 
-void buildImage(String registry, String imageName, def tag) {
-    if (registry.startsWith('docker.io/'))
-        registry = registry.substring(10)
-    sh "docker build -t ${registry}/${imageName}:${tag} ${WORKSPACE}/docker/${imageName}"
+private void buildImage(String registryAddress, String imageName, def tag) {
+    if (registryAddress?.startsWith('docker.io/'))
+        registryAddress = registryAddress.substring(10)
+    String fullName =
+            "${registryAddress != null ? ("${registryAddress}/") : ""}${imageName}${tag != null ? ":${tag}" : ""}"
+    sh "docker build -t ${fullName} ${WORKSPACE}/docker/${imageName}"
 }
 
-void removeImage(String registry, String imageName, def tag) {
-    if (registry.startsWith('docker.io/'))
-        registry = registry.substring(10)
-    sh "docker rmi ${registry}/${imageName}:${tag}"
+private void removeImage(String registryAddress, String imageName, def tag) {
+    if (registryAddress.startsWith('docker.io/'))
+        registryAddress = registryAddress.substring(10)
+    sh "docker rmi ${registryAddress}/${imageName}:${tag}"
 }
 
 private void setupSshTunnel(def sshKey, def dockerHostFile, def user, def host) {
