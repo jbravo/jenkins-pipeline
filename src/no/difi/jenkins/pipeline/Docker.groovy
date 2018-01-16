@@ -169,7 +169,11 @@ void push(String registry, String imageName, def tag, def username, def password
     echo "Logging in to registry ${registry}..."
     echo "${password}" | docker login ${loginRegistry} -u "${username}" --password-stdin || { >&2 echo "Failed to login to registry for pushing image ${imageName}"; exit 1; }
     echo "Pushing image ${pushRegistry}/${imageName}:${tag}..."
-    docker push ${pushRegistry}/${imageName}:${tag} || { >&2 echo "Failed to push image ${imageName}"; exit 1; }
+    docker push ${pushRegistry}/${imageName}:${tag} || { >&2 echo "Failed to push tag '${tag}' image ${imageName}"; exit 1; }
+    echo "Tagging image ${pushRegistry}/${imageName}:${tag} with tag 'latest'..."
+    docker tag ${pushRegistry}/${imageName}:${tag} ${pushRegistry}/${imageName}
+    echo "Pushing image ${pushRegistry}/${imageName}:latest..."
+    docker push ${pushRegistry}/${imageName} || { >&2 echo "Failed to push tag 'latest' for image ${imageName}"; exit 1; }
     echo "Logging out from registry ${registry}..."
     docker logout ${loginRegistry}; exit 0
     """
