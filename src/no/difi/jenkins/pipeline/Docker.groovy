@@ -121,7 +121,17 @@ private List<String> imageNames() {
 }
 
 void verify() {
-    buildAll(null, null)
+    if (imageNames().size() == 0)
+        return
+    if (fileExists("${WORKSPACE}/docker/build-images")) {
+        echo "Using project specific script to build images"
+        sh "docker/build-images"
+    } else if (fileExists("${WORKSPACE}/docker/build")) {
+        echo "Using legacy script to build images"
+        sh "docker/build verify"
+    } else {
+        buildAll null, null
+    }
 }
 
 private void buildAll(def registry, def tag) {
