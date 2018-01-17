@@ -181,10 +181,10 @@ def call(body) {
                         git.checkoutVerificationBranch()
                         if (aws.infrastructureSupported()) {
                             String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
-                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stagingDockerRegistry, params.stackName, env.version
                         } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
                             env.stackName = new Random().nextLong().abs()
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stagingDockerRegistry, env.stackName, env.version
                         }
                     }
                 }
@@ -359,7 +359,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.verificationHostName != null) {
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
+                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.dockerRegistry, params.stackName, env.version
                         }
                     }
                 }
@@ -388,7 +388,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
+                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.dockerRegistry, params.stackName, env.version
                         }
                     }
                 }
