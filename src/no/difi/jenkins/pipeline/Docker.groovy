@@ -82,7 +82,7 @@ void buildAndPublish(def version, def registry) {
         removeAll registry, version
     } else if (fileExists("${WORKSPACE}/docker/build")) {
         echo "Using legacy script to build images -- no staging support for images"
-        sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
+        backwardsCompatibleBuildAndPublish(version)
     } else {
         buildAll registry, version
         pushAll registry, version
@@ -269,5 +269,15 @@ private String backwardsCompatible(def registry) {
             return 'ProductionPublic'
         default:
             return registry
+    }
+}
+
+private backwardsCompatibleBuildAndPublish(def version) {
+    withCredentials([usernamePassword(
+            credentialsId: credentialsId('ProductionLocal'),
+            passwordVariable: 'registryPassword',
+            usernameVariable: 'registryUsername')]
+    ) {
+        sh "docker/build deliver ${version} ${env.registryUsername} ${env.registryPassword}"
     }
 }
