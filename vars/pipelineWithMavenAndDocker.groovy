@@ -1,3 +1,5 @@
+import no.difi.jenkins.pipeline.Components
+import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.AWS
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
@@ -5,10 +7,12 @@ import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.Puppet
 
 def call(body) {
-    AWS aws = new AWS()
-    Docker dockerClient = new Docker()
-    Git git = new Git()
-    Maven maven = new Maven()
+    Components components = new Components()
+    Jira jira = components.jira
+    AWS aws = components.aws
+    Docker dockerClient = components.docker
+    Git git = components.git
+    Maven maven = components.maven
     Map params= [:]
     params.parallelMavenDeploy = true
     params.stagingDockerRegistry = 'ProductionLocal' // TODO: Until introducing registry as parameter for stack.yaml
@@ -38,11 +42,9 @@ def call(body) {
                     }
                 }
                 steps {
-                    transitionIssue env.ISSUE_STATUS_OPEN, env.ISSUE_TRANSITION_START
-                    transitionIssue '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
-                    ensureIssueStatusIs env.ISSUE_STATUS_IN_PROGRESS
                     script {
                         currentBuild.description = "Building from commit " + git.readCommitId()
+                        jira.startWork()
                         env.verification = 'false'
                         env.startVerification = 'false'
                         env.skipWait = 'false'
@@ -60,13 +62,13 @@ def call(body) {
             stage('Wait for verification to start') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
                 steps {
-                    transitionIssue env.ISSUE_TRANSITION_READY_FOR_CODE_REVIEW
                     script {
+                        jira.readyForCodeReview()
                         if (env.startVerification == 'true') {
-                            transitionIssue '291'
+                            jira.startVerification()
                         }
+                        jira.waitUntilVerificationIsStarted()
                     }
-                    waitUntilIssueStatusIs env.ISSUE_STATUS_CODE_REVIEW
                 }
             }
             stage('Wait for verification slot') {
@@ -89,12 +91,14 @@ def call(body) {
                 }
                 post {
                     failure {
-                        transitionIssue '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                        script {
+                            jira.resumeWork()
+                        }
                     }
                     aborted {
-                        transitionIssue '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
+                        script {
+                            jira.resumeWork()
+                        }
                     }
                 }
             }
@@ -120,14 +124,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
@@ -160,14 +164,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
@@ -194,15 +198,15 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
@@ -240,8 +244,8 @@ def call(body) {
                         }
                     }
                     failure {
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                         script {
+                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
                             if (aws.infrastructureSupported()) {
                                 aws.removeInfrastructure env.version, params.stackName
@@ -251,8 +255,8 @@ def call(body) {
                         }
                     }
                     aborted {
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                         script {
+                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
                             if (aws.infrastructureSupported()) {
                                 aws.removeInfrastructure env.version, params.stackName
@@ -294,10 +298,8 @@ def call(body) {
                         script {
                             if (maven.systemTestsSupported()) {
                                 cucumber 'system-tests/target/cucumber-report.json'
-                                jiraAddComment(
-                                        idOrKey: issueId(),
-                                        comment: "Verifikasjonstester utført: [Rapport|${env.BUILD_URL}cucumber-html-reports/overview-features.html] og [byggstatus|${env.BUILD_URL}]",
-                                        auditLog: false
+                                jira.addComment(
+                                        "Verifikasjonstester utført: [Rapport|${env.BUILD_URL}cucumber-html-reports/overview-features.html] og [byggstatus|${env.BUILD_URL}]",
                                 )
                             }
                             if (aws.infrastructureSupported()) {
@@ -310,14 +312,14 @@ def call(body) {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
@@ -360,14 +362,14 @@ def call(body) {
                         script {
                             dockerClient.deletePublished env.version, params.dockerRegistry
                             maven.deletePublished env.version
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                         script {
                             dockerClient.deletePublished env.version, params.dockerRegistry
                             maven.deletePublished env.version
+                            jira.resumeWork()
                         }
                     }
                 }
@@ -403,15 +405,15 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
@@ -438,22 +440,24 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished env.version, params.dockerRegistry
+                            jira.resumeWork()
                         }
-                        transitionIssue env.ISSUE_STATUS_CODE_REVIEW, env.ISSUE_TRANSITION_RESUME_WORK
                     }
                 }
             }
             stage('Wait for manual verification to start') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
                 steps {
-                    waitUntilIssueStatusIs env.ISSUE_STATUS_MANUAL_VERIFICATION
+                    script {
+                        jira.waitUntilManualVerificationIsStarted()
+                    }
                 }
             }
             stage('Deploy for manual verification') {
@@ -482,9 +486,11 @@ def call(body) {
             stage('Wait for manual verification to finish') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
                 steps {
-                    waitUntilIssueStatusIsNot env.ISSUE_STATUS_MANUAL_VERIFICATION
-                    failIfJobIsAborted()
-                    ensureIssueStatusIs env.ISSUE_STATUS_MANUAL_VERIFICATION_OK
+                    script {
+                        jira.waitUntilManualVerificationIsFinished()
+                        failIfJobIsAborted()
+                        jira.assertManualVerificationWasSuccessful()
+                    }
                 }
             }
             stage('Deploy for production') {
