@@ -18,8 +18,7 @@ String issueStatus() {
 }
 
 boolean issueStatusIs(def targetStatus) {
-    def issueStatus = issueStatus()
-    issueStatus == targetStatus
+    issueStatus() == targetStatus as String
 }
 
 String issueSummary() {
