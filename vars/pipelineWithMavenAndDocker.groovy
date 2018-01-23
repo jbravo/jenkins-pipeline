@@ -326,7 +326,10 @@ def call(body) {
             stage('Wait for code review to finish') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
                 steps {
-                    waitForCodeReviewToFinish()
+                    script {
+                        jira.waitUntilCodeReviewIsFinished()
+                        env.codeApproved = String.valueOf(jira.isCodeApproved())
+                    }
                 }
             }
             stage('Integrate code') {
@@ -509,7 +512,7 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.stackName, env.version
+                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.dockerRegistry, params.stackName, env.version
                         }
                     }
                 }

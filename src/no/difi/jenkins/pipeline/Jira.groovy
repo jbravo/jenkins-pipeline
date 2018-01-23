@@ -55,6 +55,14 @@ void waitUntilVerificationIsStarted() {
     waitUntilIssueStatusIs config.statuses.codeReview
 }
 
+void waitUntilCodeReviewIsFinished() {
+    waitUntilIssueStatusIsNot config.statuses.codeReview
+}
+
+boolean isCodeApproved() {
+    issueStatusIs config.statuses.codeApproved
+}
+
 void waitUntilManualVerificationIsStarted() {
     waitUntilIssueStatusIs config.statuses.manualVerification
 }
