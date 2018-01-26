@@ -34,28 +34,44 @@ void readyForCodeReview() {
 }
 
 void startVerification() {
-    changeIssueStatus '291'
+    changeIssueStatus config.transitions.startVerification
 }
 
 void startWork() {
     changeIssueStatus config.statuses.open, config.transitions.start
-    changeIssueStatus '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
-    if (!issueStatusIs(config.statuses.inProgress))
-        errorHandler.trigger "Failed to change issue status to 'in progress'"
-}
-
-void resumeWork() {
-    changeIssueStatus '10717', '401' // env.ISSUE_STATUS_READY_FOR_VERIFICATION env.ISSUE_TRANSITION_CANCEL_VERIFICATION
+    changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
     changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
     if (!issueStatusIs(config.statuses.inProgress))
         errorHandler.trigger "Failed to change issue status to 'in progress'"
 }
 
+void startManualVerification() {
+    changeIssueStatus config.transitions.startManualVerification
+}
+
+void approveManualVerification() {
+    changeIssueStatus config.transitions.approveManualVerification
+}
+
+void resumeWork() {
+    changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
+    changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
+    if (!issueStatusIs(config.statuses.inProgress))
+        errorHandler.trigger "Failed to change issue status to 'in progress'"
+}
+
+void close() {
+    changeIssueStatus config.statuses.codeApproved, config.transitions.closeWithoutStaging
+    changeIssueStatus config.statuses.manualVerificationOk, config.transitions.close
+}
+
 void waitUntilVerificationIsStarted() {
+    echo "Waiting for issue status to change to 'code review'..."
     waitUntilIssueStatusIs config.statuses.codeReview
 }
 
 void waitUntilCodeReviewIsFinished() {
+    echo "Waiting for issue status to change from 'code review'..."
     waitUntilIssueStatusIsNot config.statuses.codeReview
 }
 
@@ -64,10 +80,12 @@ boolean isCodeApproved() {
 }
 
 void waitUntilManualVerificationIsStarted() {
+    echo "Waiting for issue status to change to 'manual verification'..."
     waitUntilIssueStatusIs config.statuses.manualVerification
 }
 
 void waitUntilManualVerificationIsFinished() {
+    echo "Waiting for issue status to change from 'manual verification'..."
     waitUntilIssueStatusIsNot config.statuses.manualVerification
 }
 
@@ -101,13 +119,17 @@ private void changeIssueStatus(def sourceStatus, def transitionId) {
 private void waitUntilIssueStatusIs(def targetStatus) {
     env.jobAborted = 'false'
     try {
-        retry(count: 1000000) {
-            if (!issueStatusIs(targetStatus)) {
-                sleep 10
-                errorHandler.trigger "Waiting until issue status is ${targetStatus}..."
+        int counter = 0
+        while (!issueStatusIs(targetStatus)) {
+            if (counter == 30) {
+                counter = 0
+                echo "Still waiting for issue status to change..."
             }
+            sleep 10
+            counter++
         }
     } catch (FlowInterruptedException e) {
+        echo "Waiting was aborted"
         env.jobAborted = "true"
     }
 }
@@ -115,13 +137,17 @@ private void waitUntilIssueStatusIs(def targetStatus) {
 private void waitUntilIssueStatusIsNot(def targetStatus) {
     env.jobAborted = 'false'
     try {
-        retry(count: 1000000) {
-            if (issueStatusIs(targetStatus)) {
-                sleep 10
-                errorHandler.trigger "Waiting until issue status is not ${targetStatus}..."
+        int counter = 0
+        while (issueStatusIs(targetStatus)) {
+            if (counter == 30) {
+                counter = 0
+                echo "Still waiting for issue status to change..."
             }
+            sleep 10
+            counter++
         }
     } catch (FlowInterruptedException e) {
+        echo "Waiting was aborted"
         env.jobAborted = "true"
     }
 }

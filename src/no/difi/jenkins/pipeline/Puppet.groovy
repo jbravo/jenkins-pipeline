@@ -1,11 +1,13 @@
 package no.difi.jenkins.pipeline
 
-void deploy(def version, def sshKey, def puppetModules, def librarianModules, def puppetApplyList) {
-    sshagent([sshKey]) {
+Map config
+
+void deploy(def master, def version, def puppetModules, def librarianModules, def puppetApplyList) {
+    sshagent([config.masters[master as String].sshKey]) {
         tagPuppetModules(version)
-        updateHiera('systest', version, puppetModules)
-        updateControl('systest', version, librarianModules)
-        deployToSystest(librarianModules, puppetApplyList)
+        updateHiera(version, puppetModules)
+        updateControl(version, librarianModules)
+        apply(master, librarianModules, puppetApplyList)
     }
 }
 
@@ -29,14 +31,14 @@ private void tagPuppetModules(version) {
     """
 }
 
-private void updateHiera(environment, version, modules) {
-    println "Updating version of modules ${modules} to ${version} for environment ${environment}"
+private void updateHiera(version, modules) {
+    println "Updating version of modules ${modules} to ${version}"
 
     sh """#!/usr/bin/env bash
     
     updateVersions() {
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
-        local platformFile=nodes/${environment}/platform.yaml
+        local platformFile=nodes/systest/platform.yaml
         git clone --branch=master git@eid-gitlab.dmz.local:puppet/puppet_hiera.git \${workDirectory}
         cd \${workDirectory}
         for module in ${modules}; do
@@ -45,7 +47,7 @@ private void updateHiera(environment, version, modules) {
         git add \${platformFile}
         git config --local user.name 'Jenkins'
         git config --local user.email 'jenkins@difi.no'
-        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version} for environment ${environment}" \${platformFile}
+        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version}" \${platformFile}
         git push
         cd -
         rm -rf \${workDirectory}
@@ -55,15 +57,15 @@ private void updateHiera(environment, version, modules) {
     """
 }
 
-private void updateControl(environment, version, modules) {
-    println "Updating version of modules ${modules} to ${version} for environment ${environment}"
+private void updateControl(version, modules) {
+    println "Updating version of modules ${modules} to ${version}"
 
     sh """#!/usr/bin/env bash
 
     updateControl() {
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
         local puppetFile=Puppetfile
-        git clone -b ${environment} --single-branch git@eid-gitlab.dmz.local:puppet/puppet_control.git \${workDirectory}
+        git clone -b systest --single-branch git@eid-gitlab.dmz.local:puppet/puppet_control.git \${workDirectory}
         cd \${workDirectory}
         for module in ${modules}; do
         sed -ie "/\${module}/ s/:ref => '[^']*'/:ref => '${version}'/" \${puppetFile}
@@ -71,7 +73,7 @@ private void updateControl(environment, version, modules) {
         git add \${puppetFile}
         git config --local user.name 'Jenkins'
         git config --local user.email 'jenkins@difi.no'
-        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version} for environment ${environment}" \${puppetFile}
+        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version}" \${puppetFile}
         git push
         cd -
         rm -rf \${workDirectory}
@@ -81,15 +83,16 @@ private void updateControl(environment, version, modules) {
     """
 }
 
-private void deployToSystest(librarianModules, applyParametersList) {
-    def masterHost = 'eid-puppetmaster.dmz.local'
+private void apply(def master, def librarianModules, def applyParametersList) {
+    def masterHost = config.masters[master as String].host
+    def masterHostUser = config.masters[master as String].user
     def librarianFolder = '/etc/puppet/environments/systest'
     def hieraFolder = '/etc/puppet/hieradata'
 
     sh """#!/usr/bin/env bash
 
     updateMaster() {
-        ssh -tt -o StrictHostKeyChecking=no jenkins@${masterHost} \
+        ssh -tt -o StrictHostKeyChecking=no ${masterHostUser}@${masterHost} \
         "cd ${hieraFolder} && \
         echo 'Updating Hiera-configuration at ${masterHost}:${hieraFolder}' && \
         sudo git pull && \

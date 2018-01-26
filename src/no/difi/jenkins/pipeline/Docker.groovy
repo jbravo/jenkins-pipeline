@@ -2,17 +2,29 @@ package no.difi.jenkins.pipeline
 
 import static java.util.Collections.emptyList
 
-void deployStack(def sshKey, def user, def host, def registry, def stackName, def version) {
+Map config
+
+String deployStack(def swarmId, def version) {
+    String stackName = new Random().nextLong().abs()
+    deployStack(swarmId, stackName, version)
+}
+
+String deployStack(def swarmId, def stackName, def version) {
     String dockerHostFile = newDockerHostFile()
     String dockerHost = dockerHost dockerHostFile
-    setupSshTunnel(sshKey, dockerHostFile, user, host)
+    def swarmConfig = config.swarms[swarmId as String]
+    if (swarmConfig.host == null) {
+        echo "No host defined for Docker swarm '${swarmId}' -- skipping deploy"
+        return null
+    }
+    setupSshTunnel(swarmConfig.sshKey, dockerHostFile, swarmConfig.user, swarmConfig.host)
     if (fileExists("${WORKSPACE}/docker/run")) {
         sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
-    } else {
+    } else if (fileExists("${WORKSPACE}/docker/stack.yml")) {
         if (fileExists("${WORKSPACE}/docker/run-advice")) {
             sh "${WORKSPACE}/docker/run-advice before"
         }
-        String registryAddress = registryAddress registry
+        String registryAddress = registryAddress swarmConfig.registry
         sh """#!/usr/bin/env bash
         export DOCKER_TLS_VERIFY=
         export DOCKER_HOST=${dockerHost}
@@ -31,26 +43,18 @@ void deployStack(def sshKey, def user, def host, def registry, def stackName, de
             sh "${WORKSPACE}/docker/run-advice after"
         }
     }
+    stackName
 }
 
-void removeStack(def sshKey, def user, def host, def stackName) {
-    String dockerHostFile = newDockerHostFile()
-    setupSshTunnel(sshKey, dockerHostFile, user, host)
-    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}; rm ${dockerHostFile}"
-}
-
-boolean stackSupported() {
-    if (fileExists("${WORKSPACE}/docker/stack.yml")) {
-        echo "Docker stack is supported"
-        return true
-    } else {
-        echo "Docker stack is not supported"
-        return false
+void removeStack(def swarmId, def stackName) {
+    def swarmConfig = config.swarms[swarmId as String]
+    if (swarmConfig.host == null) {
+        echo "No host defined for Docker swarm '${swarmId}' -- skipping removeStack"
+        return
     }
-}
-
-boolean automaticVerificationSupported(def verificationHostName) {
-    stackSupported() && verificationHostName?.equals('eid-test01.dmz.local')
+    String dockerHostFile = newDockerHostFile()
+    setupSshTunnel(swarmConfig.sshKey, dockerHostFile, swarmConfig.user, swarmConfig.host)
+    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}; rm ${dockerHostFile}"
 }
 
 private boolean serviceExists(def stackName, String service, String dockerHost) {
@@ -72,9 +76,11 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
     return portMap
 }
 
-void buildAndPublish(def version, def registry) {
+void buildAndPublish(def swarmId, def version) {
     if (imageNames().size() == 0)
         return
+    def swarmConfig = config.swarms[swarmId as String]
+    def registry = swarmConfig.registry
     if (fileExists("${WORKSPACE}/docker/build-images")) {
         echo "Using project specific script to build images"
         sh "docker/build-images ${registryAddress(registry)} ${version}"
@@ -90,7 +96,9 @@ void buildAndPublish(def version, def registry) {
     }
 }
 
-void deletePublished(def version, def registry) {
+void deletePublished(def swarmId, def version) {
+    def swarmConfig = config.swarms[swarmId as String]
+    def registry = swarmConfig.registry
     echo "Deleting published Docker images with version ${version} from registry ${registry}..."
     withCredentials([usernamePassword(
             credentialsId: credentialsId(registry),
@@ -220,43 +228,36 @@ private static String dockerHost(String dockerHostFile) {
     "unix://${dockerHostFile}"
 }
 
-String credentialsId(def registry) {
+def credentialsId(def registry) {
     registry = backwardsCompatible(registry)
-    "docker_registry_${registry}"
+    config.registries[registry as String]?.credentialsId
 }
 
-String registryAddress(def registry) {
-    echo "Looking up registry address for: ${registry}"
-    registry = backwardsCompatible(registry)
-    switch(registry) {
-        case 'StagingLocal':
-            return "${env.dockerRegistryStagingLocalAddress}"
-        case 'StagingPublic':
-            return "${env.dockerRegistryStagingPublicAddress}"
-        case 'ProductionLocal':
-            return "${env.dockerRegistryProductionLocalAddress}"
-        case 'ProductionPublic':
-            return "${env.dockerRegistryProductionPublicAddress}"
-        default:
-            return null
-    }
+def registryCredentialsId(def swarmId) {
+    def registry = registryForSwarm swarmId
+    config.registries[registry as String]?.credentialsId
 }
 
-private String registryApiUrl(def registry) {
-    echo "Looking up registry API URL for: ${registry}"
+def registryAddressForSwarm(def swarmId) {
+    echo "Looking up registry address for swarm ${swarmId}"
+    def registry = registryForSwarm swarmId
+    config.registries[registry as String]?.address
+}
+
+def registryAddress(def registry) {
+    echo "Looking up registry address for registry ${registry}"
     registry = backwardsCompatible(registry)
-    switch(registry) {
-        case 'StagingLocal':
-            return "${env.dockerRegistryStagingLocalApiUrl}"
-        case 'StagingPublic':
-            return "${env.dockerRegistryStagingPublicApiUrl}"
-        case 'ProductionLocal':
-            return "${env.dockerRegistryProductionLocalApiUrl}"
-        case 'ProductionPublic':
-            return "${env.dockerRegistryProductionPublicApiUrl}"
-        default:
-            return null
-    }
+    config.registries[registry as String]?.address
+}
+
+private def registryApiUrl(def registry) {
+    echo "Looking up registry API URL for registry ${registry}"
+    registry = backwardsCompatible(registry)
+    config.registries[registry as String]?.apiUrl
+}
+
+private def registryForSwarm(def swarmId) {
+    config.swarms[swarmId as String]?.registry
 }
 
 private String backwardsCompatible(def registry) {

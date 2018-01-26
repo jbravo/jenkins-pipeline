@@ -1,6 +1,5 @@
 import no.difi.jenkins.pipeline.Components
 import no.difi.jenkins.pipeline.Jira
-import no.difi.jenkins.pipeline.AWS
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Maven
@@ -9,13 +8,13 @@ import no.difi.jenkins.pipeline.Puppet
 def call(body) {
     Components components = new Components()
     Jira jira = components.jira
-    AWS aws = components.aws
     Docker dockerClient = components.docker
     Git git = components.git
     Maven maven = components.maven
-    Map params= [:]
+    Puppet puppet = components.puppet
+    String projectName = JOB_NAME.tokenize('/')[0]
+    Map params = [:]
     params.parallelMavenDeploy = true
-    params.stagingDockerRegistry = 'ProductionLocal' // TODO: Until introducing registry as parameter for stack.yaml
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -47,14 +46,11 @@ def call(body) {
                         jira.startWork()
                         env.verification = 'false'
                         env.startVerification = 'false'
-                        env.skipWait = 'false'
                         String commitMessage = git.readCommitMessage()
                         if (commitMessage.startsWith('ready!'))
                             env.verification = 'true'
                         if (commitMessage.startsWith('ready!!'))
                             env.startVerification = 'true'
-                        if (commitMessage.startsWith('ready!!!'))
-                            env.skipWait = 'true'
                         maven.verify params.MAVEN_OPTS
                     }
                 }
@@ -135,8 +131,8 @@ def call(body) {
                     }
                 }
             }
-            stage('Build artifacts') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Verification deliver (Java)') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 environment {
                     nexus = credentials('nexus')
                 }
@@ -145,17 +141,17 @@ def call(body) {
                         label 'slave'
                         image 'difi/jenkins-agent'
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
-                             '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                                '--network pipeline_pipeline ' +
+                                '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                '-u root:root'
                     }
                 }
                 steps {
                     script {
                         git.checkoutVerificationBranch()
                         maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                'StagingPublic',
+                                params.verificationEnvironment,
                                 'http://nexus:8081/repository/maven-releases', env.nexus_USR, env.nexus_PSW
                         )
                     }
@@ -175,8 +171,8 @@ def call(body) {
                     }
                 }
             }
-            stage('Build Docker images') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Verification deliver (Docker)') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -190,31 +186,28 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish env.version, params.stagingDockerRegistry
+                        dockerClient.buildAndPublish params.verificationEnvironment, env.version
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Deploy for verification') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
-                environment {
-                    aws = credentials('aws')
-                }
+            stage('Verification deploy') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -228,47 +221,28 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (aws.infrastructureSupported()) {
-                            String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
-                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stagingDockerRegistry, params.stackName, env.version
-                        } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                            env.stackName = new Random().nextLong().abs()
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stagingDockerRegistry, env.stackName, env.version
-                        }
+                        env.stackName = dockerClient.deployStack params.verificationEnvironment, env.version
                     }
                 }
                 post {
-                    always {
-                        script {
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
-                        }
-                    }
                     failure {
                         script {
-                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
+                            jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
-                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
+                            jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Verify behaviour') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Verification tests') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -283,14 +257,8 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (maven.systemTestsSupported() && dockerClient.automaticVerificationSupported(params.verificationHostName))
-                            maven.runSystemTests params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                        // TODO: Support the system tests for poc-statistics
-                        //node1 = "statistics-${env.version}-node1"
-                        //node2 = "statistics-${env.version}-node2"
-                        //sh "pipelinex/environment.sh login ${node1} bash -s -- < pipelinex/application.sh verify ${env.version}"
-                        //sh "pipelinex/environment.sh terminateNode ${node1}"
-                        //sh "pipelinex/environment.sh login ${node2} bash -s -- < pipelinex/application.sh verifyTestData"
+                        if (maven.systemTestsSupported())
+                            maven.runSystemTests params.verificationEnvironment, env.stackName
                     }
                 }
                 post {
@@ -302,11 +270,7 @@ def call(body) {
                                         "Verifikasjonstester utført: [Rapport|${env.BUILD_URL}cucumber-html-reports/overview-features.html] og [byggstatus|${env.BUILD_URL}]",
                                 )
                             }
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
+                            dockerClient.removeStack params.verificationEnvironment, env.stackName
                         }
                     }
                     failure {
@@ -324,7 +288,7 @@ def call(body) {
                 }
             }
             stage('Wait for code review to finish') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
                 steps {
                     script {
                         jira.waitUntilCodeReviewIsFinished()
@@ -363,31 +327,27 @@ def call(body) {
                     }
                     failure {
                         script {
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            maven.deletePublished env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            maven.deletePublished env.version
                             jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Publish Java artifacts') {
+            stage('Staging/production deliver (Java)') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
                 agent {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
                         args '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
-                             '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                                '--network pipeline_pipeline ' +
+                                '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                '-u root:root'
                     }
                 }
                 environment {
@@ -397,74 +357,115 @@ def call(body) {
                     failIfJobIsAborted()
                     script {
                         git.checkoutVerificationBranch()
-                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                params.dockerRegistry,
-                                'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local', env.artifactory_USR, env.artifactory_PSW
-                        )
+                        String javaRepository = 'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local'
+                        if (params.stagingEnvironment != null) {
+                            maven.deployDockerAndJava(
+                                    env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
+                                    params.stagingEnvironment,
+                                    javaRepository, env.artifactory_USR, env.artifactory_PSW
+                            )
+                        } else {
+                            maven.deployJava(
+                                    env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
+                                    javaRepository, env.artifactory_USR, env.artifactory_PSW
+                            )
+                        }
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
                             jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Publish Docker images') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true'} }
+            stage('Staging deliver (Docker)') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
                         args '--network pipeline_pipeline ' +
-                                '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                                '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                                '-u root:root'
+                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                             '-u root:root'
                     }
                 }
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish env.version, params.dockerRegistry
+                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            jira.resumeWork()
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            jira.resumeWork()
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                         }
                     }
                 }
             }
-            stage('Wait for manual verification to start') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
-                steps {
-                    script {
-                        jira.waitUntilManualVerificationIsStarted()
+            stage('Staging') {
+                options {
+                    lock resource: projectName
+                }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
+                failFast true
+                parallel() {
+                    stage('Deploy') {
+                        options {
+                            lock resource: "${params.stagingEnvironmentType}:${params.stagingEnvironment}"
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image 'difi/jenkins-agent'
+                                args '--network pipeline_pipeline ' +
+                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                     '-u root:root'
+                            }
+                        }
+                        steps {
+                            script {
+                                git.checkoutVerificationBranch()
+                                if (params.stagingEnvironmentType == 'puppet') {
+                                    puppet.deploy params.stagingEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
+                                } else if (params.stagingEnvironmentType == 'docker') {
+                                    dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
+                                }
+                                jira.startManualVerification()
+                            }
+                        }
+                    }
+                    stage('Wait for approval') {
+                        steps {
+                            script {
+                                jira.waitUntilManualVerificationIsStarted()
+                                failIfJobIsAborted()
+                                jira.waitUntilManualVerificationIsFinished()
+                                failIfJobIsAborted()
+                                jira.assertManualVerificationWasSuccessful()
+                            }
+                        }
                     }
                 }
             }
-            stage('Deploy for manual verification') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Production deliver') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -476,44 +477,63 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        if (params.puppetModules != null) {
-                            new Puppet().deploy env.version, params.verificationHostSshKey, params.puppetModules, params.librarianModules, params.puppetApplyList
-                        } else if (dockerClient.stackSupported() && params.verificationHostName != null) {
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stackName, env.version
+                        git.checkoutVerificationBranch()
+                        dockerClient.buildAndPublish params.productionEnvironment, env.version
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            dockerClient.deletePublished params.productionEnvironment, env.version
+                        }
+                    }
+                    aborted {
+                        script {
+                            dockerClient.deletePublished params.productionEnvironment, env.version
                         }
                     }
                 }
             }
-            stage('Wait for manual verification to finish') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
-                steps {
-                    script {
-                        jira.waitUntilManualVerificationIsFinished()
-                        failIfJobIsAborted()
-                        jira.assertManualVerificationWasSuccessful()
+            stage('Production') {
+                options {
+                    lock resource: projectName
+                }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
+                failFast true
+                parallel() {
+                    stage('Deploy') {
+                        options {
+                            lock resource: "${params.productionEnvironmentType}:${params.productionEnvironment}"
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image 'difi/jenkins-agent'
+                                args '--network pipeline_pipeline ' +
+                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                     '-u root:root'
+                            }
+                        }
+                        steps {
+                            script {
+                                git.checkoutVerificationBranch()
+                                if (params.productionEnvironmentType == 'puppet') {
+                                    puppet.deploy params.productionEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
+                                } else if (params.productionEnvironmentType == 'docker') {
+                                    dockerClient.deployStack params.productionEnvironment, params.stackName, env.version
+                                }
+                            }
+                        }
                     }
                 }
             }
-            stage('Deploy for production') {
+            stage('End') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
-                agent {
-                    docker {
-                        label 'slave'
-                        image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
-                    }
-                }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.dockerRegistry, params.stackName, env.version
-                        }
+                        jira.close()
                     }
                 }
             }

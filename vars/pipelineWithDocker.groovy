@@ -1,17 +1,15 @@
 import no.difi.jenkins.pipeline.Components
 import no.difi.jenkins.pipeline.Jira
-import no.difi.jenkins.pipeline.AWS
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
 
 def call(body) {
     Components components = new Components()
     Jira jira = components.jira
-    AWS aws = components.aws
     Docker dockerClient = components.docker
     Git git = components.git
-    Map params= [:]
-    params.stagingDockerRegistry = 'StagingLocal'
+    String projectName = JOB_NAME.tokenize('/')[0]
+    Map params = [:]
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -42,14 +40,11 @@ def call(body) {
                         jira.startWork()
                         env.verification = 'false'
                         env.startVerification = 'false'
-                        env.skipWait = 'false'
                         String commitMessage = git.readCommitMessage()
                         if (commitMessage.startsWith('ready!'))
                             env.verification = 'true'
                         if (commitMessage.startsWith('ready!!'))
                             env.startVerification = 'true'
-                        if (commitMessage.startsWith('ready!!!'))
-                            env.skipWait = 'true'
                         dockerClient.verify()
                     }
                 }
@@ -130,8 +125,8 @@ def call(body) {
                     }
                 }
             }
-            stage('Build artifacts') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Verification deliver') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -145,31 +140,28 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish env.version, params.stagingDockerRegistry
+                        dockerClient.buildAndPublish params.verificationEnvironment, env.version
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Deploy for verification') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
-                environment {
-                    aws = credentials('aws')
-                }
+            stage('Verification deploy') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -183,47 +175,28 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (aws.infrastructureSupported()) {
-                            String verificationHostName = aws.createInfrastructure env.version, params.verificationHostSshKey, env.aws_USR, env.aws_PSW, params.stackName
-                            dockerClient.deployStack params.verificationHostSshKey, "ubuntu", verificationHostName, params.stagingDockerRegistry, params.stackName, env.version
-                        } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                            env.stackName = new Random().nextLong().abs()
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.stagingDockerRegistry, env.stackName, env.version
-                        }
+                        env.stackName = dockerClient.deployStack params.verificationEnvironment, env.version
                     }
                 }
                 post {
-                    always {
-                        script {
-                            dockerClient.deletePublished env.version, params.stagingDockerRegistry
-                        }
-                    }
                     failure {
                         script {
-                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
+                            jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
-                            jira.resumeWork()
                             git.deleteVerificationBranch(params.gitSshKey)
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
+                            dockerClient.deletePublished params.verificationEnvironment, env.version
+                            jira.resumeWork()
                         }
                     }
                 }
             }
-            stage('Verify behaviour') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Verification tests') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -237,34 +210,11 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                    }
-                }
-                post {
-                    always {
-                        script {
-                            if (aws.infrastructureSupported()) {
-                                aws.removeInfrastructure env.version, params.stackName
-                            } else if (dockerClient.automaticVerificationSupported(params.verificationHostName)) {
-                                dockerClient.removeStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, env.stackName
-                            }
-                        }
-                    }
-                    failure {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
-                        }
-                    }
-                    aborted {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
-                        }
                     }
                 }
             }
             stage('Wait for code review to finish') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
                 steps {
                     script {
                         jira.waitUntilCodeReviewIsFinished()
@@ -313,8 +263,8 @@ def call(body) {
                     }
                 }
             }
-            stage('Publish artifacts') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true'} }
+            stage('Staging deliver') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -328,36 +278,66 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish env.version, params.dockerRegistry
+                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            jira.resumeWork()
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished env.version, params.dockerRegistry
-                            jira.resumeWork()
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                         }
                     }
                 }
             }
-            stage('Wait for manual verification to start') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
-                steps {
-                    script {
-                        jira.waitUntilManualVerificationIsStarted()
+            stage('Staging') {
+                options {
+                    lock resource: projectName
+                }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
+                failFast true
+                parallel() {
+                    stage('Deploy') {
+                        options {
+                            lock resource: "docker:${params.stagingEnvironment}"
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image 'difi/jenkins-agent'
+                                args '--network pipeline_pipeline ' +
+                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                     '-u root:root'
+                            }
+                        }
+                        steps {
+                            script {
+                                git.checkoutVerificationBranch()
+                                dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
+                                jira.startManualVerification()
+                            }
+                        }
+                    }
+                    stage('Wait for approval') {
+                        steps {
+                            script {
+                                jira.waitUntilManualVerificationIsStarted()
+                                failIfJobIsAborted()
+                                jira.waitUntilManualVerificationIsFinished()
+                                failIfJobIsAborted()
+                                jira.assertManualVerificationWasSuccessful()
+                            }
+                        }
                     }
                 }
             }
-            stage('Deploy for manual verification') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+            stage('Production deliver') {
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -369,42 +349,59 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        if (dockerClient.stackSupported() && params.verificationHostName != null) {
-                            dockerClient.deployStack params.verificationHostSshKey, params.verificationHostUser, params.verificationHostName, params.dockerRegistry, params.stackName, env.version
+                        git.checkoutVerificationBranch()
+                        dockerClient.buildAndPublish params.productionEnvironment, env.version
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            dockerClient.deletePublished params.productionEnvironment, env.version
+                        }
+                    }
+                    aborted {
+                        script {
+                            dockerClient.deletePublished params.productionEnvironment, env.version
                         }
                     }
                 }
             }
-            stage('Wait for manual verification to finish') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && env.skipWait == 'false'} }
-                steps {
-                    script {
-                        jira.waitUntilManualVerificationIsFinished()
-                        failIfJobIsAborted()
-                        jira.assertManualVerificationWasSuccessful()
+            stage('Production') {
+                options {
+                    lock resource: projectName
+                }
+                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
+                failFast true
+                parallel() {
+                    stage('Deploy') {
+                        options {
+                            lock resource: "docker:${params.productionEnvironment}"
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image 'difi/jenkins-agent'
+                                args '--network pipeline_pipeline ' +
+                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
+                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+                                     '-u root:root'
+                            }
+                        }
+                        steps {
+                            script {
+                                git.checkoutVerificationBranch()
+                                dockerClient.deployStack params.productionEnvironment, params.stackName, env.version
+                            }
+                        }
                     }
                 }
             }
-            stage('Deploy for production') {
+            stage('End') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
-                agent {
-                    docker {
-                        label 'slave'
-                        image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
-                    }
-                }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        if (dockerClient.stackSupported() && params.productionHostName != null) {
-                            dockerClient.deployStack params.productionHostSshKey, params.productionHostUser, params.productionHostName, params.dockerRegistry, params.stackName, env.version
-                        }
+                        jira.close()
                     }
                 }
             }

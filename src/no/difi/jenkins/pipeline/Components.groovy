@@ -21,12 +21,15 @@ class Components {
         aws = new AWS()
         crucible = new Crucible()
         docker = new Docker()
+        docker.config = config.docker
         git = new Git()
         jira = new Jira()
         jira.config = config.jira
         jira.errorHandler = errorHandler
         maven = new Maven()
+        maven.docker = docker
         puppet = new Puppet()
+        puppet.config = config.puppet
     }
 
 }
