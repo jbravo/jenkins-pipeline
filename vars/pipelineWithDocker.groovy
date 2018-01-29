@@ -9,6 +9,10 @@ def call(body) {
     Docker dockerClient = components.docker
     Git git = components.git
     String projectName = JOB_NAME.tokenize('/')[0]
+    String agentArgs = '--network pipeline_pipeline ' +
+            '-v /var/run/docker.sock:/var/run/docker.sock ' +
+            '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
+            '-u root:root'
     Map params = [:]
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
@@ -28,10 +32,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -67,10 +68,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -101,10 +99,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -131,10 +126,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -166,10 +158,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -201,10 +190,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -228,9 +214,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -264,10 +248,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -306,10 +287,7 @@ def call(body) {
                             docker {
                                 label 'slave'
                                 image 'difi/jenkins-agent'
-                                args '--network pipeline_pipeline ' +
-                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                                     '-u root:root'
+                                args agentArgs
                             }
                         }
                         steps {
@@ -353,10 +331,7 @@ def call(body) {
                     docker {
                         label 'slave'
                         image 'difi/jenkins-agent'
-                        args '--network pipeline_pipeline ' +
-                             '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                             '-u root:root'
+                        args agentArgs
                     }
                 }
                 steps {
@@ -395,10 +370,7 @@ def call(body) {
                             docker {
                                 label 'slave'
                                 image 'difi/jenkins-agent'
-                                args '--network pipeline_pipeline ' +
-                                     '-v /var/run/docker.sock:/var/run/docker.sock ' +
-                                     '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
-                                     '-u root:root'
+                                args agentArgs
                             }
                         }
                         steps {
@@ -424,6 +396,13 @@ def call(body) {
             }
             stage('End') {
                 when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args agentArgs
+                    }
+                }
                 steps {
                     script {
                         jira.close()
