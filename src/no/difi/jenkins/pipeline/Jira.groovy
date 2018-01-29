@@ -56,6 +56,7 @@ void approveManualVerification() {
 void resumeWork() {
     changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
     changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
+    changeIssueStatus config.statuses.codeApproved, config.transitions.resumeWorkFromApprovedCode
     if (!issueStatusIs(config.statuses.inProgress))
         errorHandler.trigger "Failed to change issue status to 'in progress'"
 }

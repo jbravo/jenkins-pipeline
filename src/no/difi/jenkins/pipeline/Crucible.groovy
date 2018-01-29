@@ -26,9 +26,9 @@ void createReview(String commitId, String issueSummary, String issueId, String c
     statusCode=\$(curl \
         -u '${username}:${password}' \
         -H 'Content-Type: application/json' \
-        -fsS '${crucibleUrl}/rest-service/reviews-v1' \
         -w '%{http_code}' \
-        -d '${request}') ||
+        -d '${request}' \
+        -fsS '${crucibleUrl}/rest-service/reviews-v1') ||
     {
         [ "\${statusCode}" == "401" ] && { >&2 echo "Incorrect credentials for ${crucibleUrl}"; return 1; }
         [ "\${statusCode}" == "500" ] && { >&2 echo "Is the repository called ${crucibleRepository} and the project key ${crucibleProjectKey} in Fisheye/Crucible?"; return 1; }
@@ -39,9 +39,12 @@ void createReview(String commitId, String issueSummary, String issueId, String c
 
 private String request(String commitId, String issueSummary, String issueId, String crucibleProjectKey, String crucibleRepository) {
     String requestTemplate = libraryResource 'crucibleRequest.json'
+    String safeIssueSummary = issueSummary
+            .replaceAll("'", '"')
+            .replaceAll('"', '\\\\"')
     Map binding = [
             'crucibleProjectKey' : crucibleProjectKey,
-            'commitMessage' : issueSummary.replaceAll('"', '\\\\"'),
+            'commitMessage' : safeIssueSummary,
             'issueId' : issueId,
             'commitId' : commitId,
             'repositoryName' : crucibleRepository
