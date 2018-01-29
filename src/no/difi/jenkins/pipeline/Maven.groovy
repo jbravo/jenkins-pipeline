@@ -72,7 +72,7 @@ VerificationTestResult runVerificationTests(def swarmId, def stackName) {
         -DseleniumUrl=http://${swarmConfig.host}:${servicePorts.get('selenium')}/wd/hub\
         -DdatabaseUrl=${swarmConfig.host}:${servicePorts.get('eid-atest-db')}
     """
-    cucumber jsonReportFile
+    cucumber 'system-tests/target/cucumber-report.json'
     new VerificationTestResult(
             success: status == 0,
             reportUrl: "${env.BUILD_URL}cucumber-html-reports/overview-features.html"
