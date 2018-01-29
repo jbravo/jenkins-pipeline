@@ -81,7 +81,7 @@ VerificationTestResult runVerificationTests(def swarmId, def stackName) {
 
 void deletePublished(def version) {
     try {
-        echo "Deleting artifacts for rejected version ${version}"
+        echo "Deleting artifacts for version ${version}"
         url = "http://eid-artifactory.dmz.local:8080/artifactory/api/search/gavc?v=${version}&repos=libs-release-local"
         httpresponse = httpRequest url
         response = new JsonSlurperClassic().parseText(httpresponse.content)
@@ -94,13 +94,13 @@ void deletePublished(def version) {
                 try {
                     httpRequest customHeaders: [[name: 'X-JFrog-Art-Api', value: artifactory, maskValue: true]], httpMode: 'DELETE', url: item
                 }
-                catch (Exception e){
-                    echo e.toString()
+                catch (e){
+                    echo "Failed to delete Maven artifact ${item}: ${e.message}"
                 }
             }
         }
-    } catch (Exception e) {
-        echo e.toString()
+    } catch (e) {
+        echo "Failed to delete Maven artifacts: ${e.message}"
     }
 }
 

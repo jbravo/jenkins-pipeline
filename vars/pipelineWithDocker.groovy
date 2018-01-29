@@ -207,6 +207,38 @@ def call(body) {
                     }
                 }
             }
+            stage('Staging deliver') {
+                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args agentArgs
+                    }
+                }
+                steps {
+                    script {
+                        git.checkoutVerificationBranch()
+                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
+                        }
+                    }
+                    aborted {
+                        script {
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            jira.resumeWork()
+                        }
+                    }
+                }
+            }
             stage('Integrate code') {
                 when { expression { env.verification == 'true' } }
                 agent {
@@ -231,42 +263,14 @@ def call(body) {
                     }
                     failure {
                         script {
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
-                        }
-                    }
-                }
-            }
-            stage('Staging deliver') {
-                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
-                agent {
-                    docker {
-                        label 'slave'
-                        image 'difi/jenkins-agent'
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
-                        }
-                    }
-                    aborted {
-                        script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                 }

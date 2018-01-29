@@ -277,40 +277,6 @@ def call(body) {
                     }
                 }
             }
-            stage('Integrate code') {
-                when { expression { env.verification == 'true' } }
-                agent {
-                    docker {
-                        label 'slave'
-                        image 'difi/jenkins-agent'
-                        args agentArgs
-                    }
-                }
-                steps {
-                    failIfJobIsAborted()
-                    failIfCodeNotApproved()
-                    script {
-                        git.integrateCode params.gitSshKey
-                    }
-                }
-                post {
-                    always {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                        }
-                    }
-                    failure {
-                        script {
-                            jira.resumeWork()
-                        }
-                    }
-                    aborted {
-                        script {
-                            jira.resumeWork()
-                        }
-                    }
-                }
-            }
             stage('Staging/production deliver (Java)') {
                 when { expression { env.verification == 'true' } }
                 agent {
@@ -345,12 +311,16 @@ def call(body) {
                 post {
                     failure {
                         script {
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            maven.deletePublished env.version
+                            jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            maven.deletePublished env.version
+                            jira.resumeWork()
                         }
                     }
                 }
@@ -373,14 +343,56 @@ def call(body) {
                 post {
                     failure {
                         script {
+                            git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            maven.deletePublished env.version
+                            jira.resumeWork()
+                        }
+                    }
+                    aborted {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
+                            maven.deletePublished env.version
+                            jira.resumeWork()
+                        }
+                    }
+                }
+            }
+            stage('Integrate code') {
+                when { expression { env.verification == 'true' } }
+                agent {
+                    docker {
+                        label 'slave'
+                        image 'difi/jenkins-agent'
+                        args agentArgs
+                    }
+                }
+                steps {
+                    failIfJobIsAborted()
+                    failIfCodeNotApproved()
+                    script {
+                        git.integrateCode params.gitSshKey
+                    }
+                }
+                post {
+                    always {
+                        script {
+                            git.deleteVerificationBranch(params.gitSshKey)
+                        }
+                    }
+                    failure {
+                        script {
+                            dockerClient.deletePublished params.stagingEnvironment, env.version
+                            maven.deletePublished env.version
+                            jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            maven.deletePublished env.version
+                            jira.resumeWork()
                         }
                     }
                 }
