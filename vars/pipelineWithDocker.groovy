@@ -27,7 +27,6 @@ def call(body) {
         }
         stages {
             stage('Check build') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) } }
                 agent {
                     docker {
                         label 'slave'
@@ -51,7 +50,7 @@ def call(body) {
                 }
             }
             stage('Wait for verification to start') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 steps {
                     script {
                         jira.readyForCodeReview()
@@ -63,7 +62,7 @@ def call(body) {
                 }
             }
             stage('Wait for verification slot') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 agent {
                     docker {
                         label 'slave'
@@ -91,7 +90,7 @@ def call(body) {
                 }
             }
             stage('Prepare verification') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 environment {
                     crucible = credentials('crucible')
                 }
@@ -121,7 +120,7 @@ def call(body) {
                 }
             }
             stage('Verification deliver') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
+                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -153,7 +152,7 @@ def call(body) {
                 }
             }
             stage('Verification deploy') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
+                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -185,7 +184,7 @@ def call(body) {
                 }
             }
             stage('Verification tests') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.verificationEnvironment != null } }
+                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -200,7 +199,7 @@ def call(body) {
                 }
             }
             stage('Wait for code review to finish') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 steps {
                     script {
                         jira.waitUntilCodeReviewIsFinished()
@@ -209,7 +208,7 @@ def call(body) {
                 }
             }
             stage('Integrate code') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 agent {
                     docker {
                         label 'slave'
@@ -243,7 +242,7 @@ def call(body) {
                 }
             }
             stage('Staging deliver') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
+                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -276,7 +275,7 @@ def call(body) {
                 options {
                     lock resource: projectName
                 }
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.stagingEnvironment != null } }
+                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
                 failFast true
                 parallel() {
                     stage('Deploy') {
@@ -326,7 +325,7 @@ def call(body) {
                 }
             }
             stage('Production deliver') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
+                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -359,7 +358,7 @@ def call(body) {
                 options {
                     lock resource: projectName
                 }
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' && params.productionEnvironment != null } }
+                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
                 failFast true
                 parallel() {
                     stage('Deploy') {
@@ -395,7 +394,7 @@ def call(body) {
                 }
             }
             stage('End') {
-                when { expression { env.BRANCH_NAME.matches(/work\/(\w+-\w+)/) && env.verification == 'true' } }
+                when { expression { env.verification == 'true' } }
                 agent {
                     docker {
                         label 'slave'
