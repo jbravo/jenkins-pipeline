@@ -320,11 +320,6 @@ def call(body) {
                             git.deleteVerificationBranch(params.gitSshKey)
                         }
                     }
-                    success {
-                        script {
-                            git.deleteWorkBranch(params.gitSshKey)
-                        }
-                    }
                     failure {
                         script {
                             jira.resumeWork()
@@ -375,14 +370,12 @@ def call(body) {
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                 }
@@ -409,11 +402,13 @@ def call(body) {
                     failure {
                         script {
                             dockerClient.deletePublished params.stagingEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.stagingEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                 }
@@ -448,6 +443,20 @@ def call(body) {
                                     dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
                                 }
                                 jira.startManualVerification()
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    dockerClient.deletePublished params.stagingEnvironment, env.version
+                                    git.deleteWorkBranch(params.gitSshKey)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    dockerClient.deletePublished params.stagingEnvironment, env.version
+                                    git.deleteWorkBranch(params.gitSshKey)
+                                }
                             }
                         }
                     }
@@ -486,11 +495,13 @@ def call(body) {
                     failure {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                 }
@@ -526,6 +537,18 @@ def call(body) {
                                 }
                             }
                         }
+                        post {
+                            failure {
+                                script {
+                                    git.deleteWorkBranch(params.gitSshKey)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    git.deleteWorkBranch(params.gitSshKey)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -534,6 +557,7 @@ def call(body) {
                 steps {
                     script {
                         jira.close()
+                        git.deleteWorkBranch(params.gitSshKey)
                     }
                 }
             }
