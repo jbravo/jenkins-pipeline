@@ -46,35 +46,37 @@ private void deploy(def version, def mavenOptions, def parallel, def javaReposit
     sh "rm ${settingsFile}"
 }
 
-boolean systemTestsSupported() {
+boolean verificationTestsSupported(def swarmId) {
     int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/system-tests ]")
-    if (status == 0) {
-        echo "System tests are supported"
-        return true
-    } else {
-        echo "System tests are not supported"
+    if (status != 0){
+        echo "Verification tests are not supported (no system-tests folder)"
         return false
     }
+    if (docker.config.swarms[swarmId as String]?.host == null) {
+        echo "No host defined for Docker swarm '${swarmId}' -- skipping tests"
+        return false
+    }
+    true
 }
 
-void runSystemTests(def swarmId, def stackName) {
-    if (!systemTestsSupported()) return
+VerificationTestResult runVerificationTests(def swarmId, def stackName) {
     def swarmConfig = docker.config.swarms[swarmId as String]
-    if (swarmConfig.host == null) {
-        echo "No host defined for Docker swarm '${swarmId}' -- skipping tests"
-        return
-    }
     Map servicePorts = docker.servicePorts(
             swarmConfig.sshKey, swarmConfig.user, swarmConfig.host, stackName,
             'eid-atest-admin', 'eid-atest-idp-app', 'selenium', 'eid-atest-db'
     )
-    sh """
+    int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
         -DadminDirectBaseURL=http://${swarmConfig.host}:${servicePorts.get('eid-atest-admin')}/idporten-admin/\
         -DminIDOnTheFlyUrl=http://${swarmConfig.host}:${servicePorts.get('eid-atest-idp-app')}/minid_filegateway/\
         -DseleniumUrl=http://${swarmConfig.host}:${servicePorts.get('selenium')}/wd/hub\
         -DdatabaseUrl=${swarmConfig.host}:${servicePorts.get('eid-atest-db')}
     """
+    cucumber jsonReportFile
+    new VerificationTestResult(
+            success: status == 0,
+            reportUrl: "${env.BUILD_URL}cucumber-html-reports/overview-features.html"
+    )
 }
 
 void deletePublished(def version) {

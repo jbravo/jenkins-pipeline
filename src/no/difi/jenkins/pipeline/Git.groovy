@@ -92,7 +92,12 @@ void resetVerificationBranchToOrigin() {
 
 void deleteVerificationBranch(def sshKey) {
     echo "Deleting verification branch"
-    sshagent([sshKey]) { sh "git push origin --delete ${verificationBranch()}" }
+    sshagent([sshKey]) {
+        int status = sh returnStatus: true, script: "git push origin --delete ${verificationBranch()}"
+        if (status != 0) {
+            echo "Failed to delete verification branch ${verificationBranch()}. Verification for this project will be locked to this work branch (${env.BRANCH_NAME})"
+        }
+    }
 }
 
 void deleteWorkBranch(def sshKey) {

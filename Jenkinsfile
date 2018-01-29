@@ -1,4 +1,4 @@
-@Library('jenkins-pipeline@work/PBLEID-15589') _
+@Library('jenkins-pipeline@work/PBLEID-15489') _
 
 pipelineWithDocker {
     productionEnvironment = 'public-delivery'

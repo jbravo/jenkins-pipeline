@@ -53,8 +53,12 @@ void removeStack(def swarmId, def stackName) {
         return
     }
     String dockerHostFile = newDockerHostFile()
-    setupSshTunnel(swarmConfig.sshKey, dockerHostFile, swarmConfig.user, swarmConfig.host)
-    sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}; rm ${dockerHostFile}"
+    try {
+        setupSshTunnel(swarmConfig.sshKey, dockerHostFile, swarmConfig.user, swarmConfig.host)
+        sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost(dockerHostFile)} docker stack rm ${stackName}; rm ${dockerHostFile}"
+    } catch (e) {
+        echo "Failed to remove stack ${stackName} from swarm ${swarmId}: ${e.message}"
+    }
 }
 
 private boolean serviceExists(def stackName, String service, String dockerHost) {
@@ -97,26 +101,32 @@ void buildAndPublish(def swarmId, def version) {
 }
 
 void deletePublished(def swarmId, def version) {
-    def swarmConfig = config.swarms[swarmId as String]
-    def registry = swarmConfig.registry
-    echo "Deleting published Docker images with version ${version} from registry ${registry}..."
+    def credentialsId = registryCredentialsId swarmId
+    if (credentialsId == null) {
+        echo "No registry credentials configured for swarm '${swarmId} -- will not attempt to delete published images"
+        return
+    }
+    String registryApiUrl = registryApiUrlForSwarm swarmId
+    if (registryApiUrl == null) {
+        echo "No registry API URL configured for swarm '${swarmId} -- will not attempt to delete published images"
+        return
+    }
+    echo "Deleting published Docker images with version ${version}..."
     withCredentials([usernamePassword(
-            credentialsId: credentialsId(registry),
+            credentialsId: credentialsId,
             passwordVariable: 'registryPassword',
             usernameVariable: 'registryUsername')]
     ) {
-        String registryApiUrl = registryApiUrl registry
-        if (registryApiUrl == null || registryApiUrl.trim().isEmpty()) {
-            echo "Registry ${registry} not supported for deletion"
-            return
-        }
         imageNames().each { imageName ->
             echo "Deleting image ${imageName}"
-            sh returnStatus: true, script: """
+            int status = sh returnStatus: true, script: """
                 digest=\$(curl -sSf -o /dev/null -D - -u '${env.registryUsername}:${env.registryPassword}' -H 'Accept:application/vnd.docker.distribution.manifest.v2+json' ${registryApiUrl}/v2/${imageName}/manifests/${version} | grep Docker-Content-Digest | cut -d' ' -f2)
                 digest=\${digest%[\$'\t\r\n']}
                 curl -sSf -u '${env.registryUsername}:${env.registryPassword}' -X DELETE ${registryApiUrl}/v2/${imageName}/manifests/\${digest}
             """
+            if (status != 0) {
+                echo "Failed to delete image ${imageName} from registry"
+            }
         }
     }
 }
@@ -242,6 +252,12 @@ def registryAddressForSwarm(def swarmId) {
     echo "Looking up registry address for swarm ${swarmId}"
     def registry = registryForSwarm swarmId
     config.registries[registry as String]?.address
+}
+
+def registryApiUrlForSwarm(def swarmId) {
+    echo "Looking up registry API URL for swarm ${swarmId}"
+    def registry = registryForSwarm swarmId
+    config.registries[registry as String]?.apiUrl
 }
 
 def registryAddress(def registry) {

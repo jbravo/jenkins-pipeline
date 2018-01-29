@@ -4,6 +4,7 @@ import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.Puppet
+import no.difi.jenkins.pipeline.VerificationTestResult
 
 def call(body) {
     Components components = new Components()
@@ -238,19 +239,19 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        if (maven.systemTestsSupported())
-                            maven.runSystemTests params.verificationEnvironment, env.stackName
+                        if (maven.verificationTestsSupported(params.verificationEnvironment)) {
+                            VerificationTestResult result = maven.runVerificationTests params.verificationEnvironment, env.stackName
+                            jira.addComment(
+                                    "Verifikasjonstester utført: [Rapport|${result.reportUrl()}] og [byggstatus|${env.BUILD_URL}]",
+                            )
+                            if (!result.success())
+                                error 'Verification tests failed'
+                        }
                     }
                 }
                 post {
                     always {
                         script {
-                            if (maven.systemTestsSupported()) {
-                                cucumber 'system-tests/target/cucumber-report.json'
-                                jira.addComment(
-                                        "Verifikasjonstester utført: [Rapport|${env.BUILD_URL}cucumber-html-reports/overview-features.html] og [byggstatus|${env.BUILD_URL}]",
-                                )
-                            }
                             dockerClient.removeStack params.verificationEnvironment, env.stackName
                         }
                     }
