@@ -9,6 +9,8 @@ def call(body) {
     Docker dockerClient = components.docker
     Git git = components.git
     String projectName = JOB_NAME.tokenize('/')[0]
+    String stagingLock = projectName + '-staging'
+    String productionLock = projectName + '-production'
     String agentArgs = '--network pipeline_pipeline ' +
             '-v /var/run/docker.sock:/var/run/docker.sock ' +
             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
@@ -17,6 +19,20 @@ def call(body) {
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
+    node() {
+        checkout scm
+        env.verification = 'false'
+        env.startVerification = 'false'
+        String commitMessage = git.readCommitMessage()
+        if (commitMessage.startsWith('ready!'))
+            env.verification = 'true'
+        else {
+            stagingLockName += '-no-lock'
+            productionLockName += '-no-lock'
+        }
+        if (commitMessage.startsWith('ready!!'))
+            env.startVerification = 'true'
+    }
 
     pipeline {
         agent none
@@ -38,13 +54,6 @@ def call(body) {
                     script {
                         currentBuild.description = "Building from commit " + git.readCommitId()
                         jira.startWork()
-                        env.verification = 'false'
-                        env.startVerification = 'false'
-                        String commitMessage = git.readCommitMessage()
-                        if (commitMessage.startsWith('ready!'))
-                            env.verification = 'true'
-                        if (commitMessage.startsWith('ready!!'))
-                            env.startVerification = 'true'
                         dockerClient.verify()
                     }
                 }
@@ -217,6 +226,8 @@ def call(body) {
                     }
                 }
                 steps {
+                    failIfJobIsAborted()
+                    failIfCodeNotApproved()
                     script {
                         git.checkoutVerificationBranch()
                         dockerClient.buildAndPublish params.stagingEnvironment, env.version
@@ -277,7 +288,7 @@ def call(body) {
             }
             stage('Staging') {
                 options {
-                    lock resource: projectName
+                    lock resource: stagingLock
                 }
                 when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
                 failFast true
@@ -360,7 +371,7 @@ def call(body) {
             }
             stage('Production') {
                 options {
-                    lock resource: projectName
+                    lock resource: productionLock
                 }
                 when { expression { env.verification == 'true' && params.productionEnvironment != null } }
                 failFast true

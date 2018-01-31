@@ -14,6 +14,8 @@ def call(body) {
     Maven maven = components.maven
     Puppet puppet = components.puppet
     String projectName = JOB_NAME.tokenize('/')[0]
+    String stagingLock = projectName + '-staging'
+    String productionLock = projectName + '-production'
     String agentArgs = '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
             '--network pipeline_pipeline ' +
             '-v /var/run/docker.sock:/var/run/docker.sock ' +
@@ -24,6 +26,20 @@ def call(body) {
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
+    node() {
+        checkout scm
+        env.verification = 'false'
+        env.startVerification = 'false'
+        String commitMessage = git.readCommitMessage()
+        if (commitMessage.startsWith('ready!'))
+            env.verification = 'true'
+        else {
+            stagingLockName += '-no-lock'
+            productionLockName += '-no-lock'
+        }
+        if (commitMessage.startsWith('ready!!'))
+            env.startVerification = 'true'
+    }
 
     pipeline {
         agent none
@@ -45,13 +61,6 @@ def call(body) {
                     script {
                         currentBuild.description = "Building from commit " + git.readCommitId()
                         jira.startWork()
-                        env.verification = 'false'
-                        env.startVerification = 'false'
-                        String commitMessage = git.readCommitMessage()
-                        if (commitMessage.startsWith('ready!'))
-                            env.verification = 'true'
-                        if (commitMessage.startsWith('ready!!'))
-                            env.startVerification = 'true'
                         maven.verify params.MAVEN_OPTS
                     }
                 }
@@ -291,6 +300,7 @@ def call(body) {
                 }
                 steps {
                     failIfJobIsAborted()
+                    failIfCodeNotApproved()
                     script {
                         git.checkoutVerificationBranch()
                         String javaRepository = 'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local'
@@ -399,7 +409,7 @@ def call(body) {
             }
             stage('Staging') {
                 options {
-                    lock resource: projectName
+                    lock resource: stagingLock
                 }
                 when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
                 failFast true
@@ -486,7 +496,7 @@ def call(body) {
             }
             stage('Production') {
                 options {
-                    lock resource: projectName
+                    lock resource: productionLock
                 }
                 when { expression { env.verification == 'true' && params.productionEnvironment != null } }
                 failFast true
