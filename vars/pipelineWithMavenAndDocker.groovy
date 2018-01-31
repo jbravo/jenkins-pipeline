@@ -215,7 +215,8 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        env.stackName = dockerClient.deployStack params.verificationEnvironment, env.version
+                        env.stackName = dockerClient.uniqueStackName()
+                        dockerClient.deployStack params.verificationEnvironment, env.stackName, env.version
                     }
                 }
                 post {
@@ -223,6 +224,7 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished params.verificationEnvironment, env.version
+                            dockerClient.removeStack params.verificationEnvironment, env.stackName
                             jira.resumeWork()
                         }
                     }
@@ -230,6 +232,7 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished params.verificationEnvironment, env.version
+                            dockerClient.removeStack params.verificationEnvironment, env.stackName
                             jira.resumeWork()
                         }
                     }

@@ -4,9 +4,8 @@ import static java.util.Collections.emptyList
 
 Map config
 
-String deployStack(def swarmId, def version) {
-    String stackName = new Random().nextLong().abs()
-    deployStack(swarmId, stackName, version)
+String uniqueStackName() {
+    new Random().nextLong().abs()
 }
 
 String deployStack(def swarmId, def stackName, def version) {
