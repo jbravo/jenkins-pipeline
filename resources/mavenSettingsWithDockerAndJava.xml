@@ -3,6 +3,18 @@
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
 
+    <profiles>
+        <profile>
+            <id>no.difi.jenkins-pipeline.docker-push</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <no.difi.jenkins-pipeline.docker-registry>${dockerServerId}</no.difi.jenkins-pipeline.docker-registry>
+            </properties>
+        </profile>
+    </profiles>
+
     <servers>
         <server>
             <id>${dockerServerId}</id>
@@ -18,7 +30,7 @@
 
     <mirrors>
         <mirror>
-            <id>pipeline</id>
+            <id>no.difi.jenkins-pipeline.central-mirror</id>
             <name>Internal mirror</name>
             <url>http://nexus:8081/repository/maven-central/</url>
             <mirrorOf>central</mirrorOf>

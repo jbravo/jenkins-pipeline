@@ -22,7 +22,7 @@ String deployStack(def swarmId, def stackName, def version) {
         sh "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker/run ${stackName} ${version}; rm ${dockerHostFile}"
     } else if (fileExists("${WORKSPACE}/docker/stack.yml")) {
         if (fileExists("${WORKSPACE}/docker/run-advice")) {
-            sh "${WORKSPACE}/docker/run-advice before"
+            sh "${WORKSPACE}/docker/run-advice before ${stackName} ${swarmConfig.host}"
         }
         String registryAddress = registryAddress swarmConfig.registry
         sh """#!/usr/bin/env bash
@@ -40,7 +40,7 @@ String deployStack(def swarmId, def stackName, def version) {
         exit \${rc}
         """
         if (fileExists("${WORKSPACE}/docker/run-advice")) {
-            sh "${WORKSPACE}/docker/run-advice after"
+            sh "${WORKSPACE}/docker/run-advice after ${stackName} ${swarmConfig.host}"
         }
     }
     stackName

@@ -34,8 +34,8 @@ def call(body) {
         if (commitMessage.startsWith('ready!'))
             env.verification = 'true'
         else {
-            stagingLockName += '-no-lock'
-            productionLockName += '-no-lock'
+            stagingLock += '-no-lock'
+            productionLock += '-no-lock'
         }
         if (commitMessage.startsWith('ready!!'))
             env.startVerification = 'true'
