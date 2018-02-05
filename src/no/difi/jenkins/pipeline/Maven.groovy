@@ -8,7 +8,7 @@ Docker docker
 void verify(def options) {
     String settingsFile = settingsFile()
     env.MAVEN_OPTS = options ?: ""
-    sh "mvn clean verify -B -s ${settingsFile}"
+    sh "unset JENKINS_HOME; mvn clean verify -B -s ${settingsFile}"
     sh "rm ${settingsFile}"
 }
 
