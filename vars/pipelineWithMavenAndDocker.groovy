@@ -64,6 +64,11 @@ def call(body) {
                         maven.verify params.MAVEN_OPTS
                     }
                 }
+                post {
+                    always {
+                        junit '**/target/surefire-reports/TEST-*.xml'
+                    }
+                }
             }
             stage('Wait for verification to start') {
                 when { expression { env.verification == 'true' } }
@@ -157,6 +162,9 @@ def call(body) {
                     }
                 }
                 post {
+                    always {
+                        junit '**/target/surefire-reports/TEST-*.xml'
+                    }
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
