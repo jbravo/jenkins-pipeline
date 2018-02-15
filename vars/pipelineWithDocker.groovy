@@ -16,9 +16,13 @@ def call(body) {
             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
             '-u root:root'
     Map params = [:]
+    params.stagingQueue = false
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
+    if (!params.stagingQueue) {
+        stagingLock += "-${BRANCH_NAME}"
+    }
     node() {
         checkout scm
         env.verification = 'false'
