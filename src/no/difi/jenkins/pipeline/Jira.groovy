@@ -1,29 +1,143 @@
 package no.difi.jenkins.pipeline
 
+import hudson.AbortException
 import org.jenkinsci.plugins.workflow.steps.FlowInterruptedException
+
+import static java.util.stream.Collectors.joining
 
 Map config
 ErrorHandler errorHandler
+
+void setComponent(String name) {
+    try {
+        doSetComponent name
+    } catch (AbortException e) {
+        echo "Seems like component '${name} does not exist. Creating it..."
+        newComponent name
+        try {
+            doSetComponent name
+        } catch (e2) {
+            errorHandler.trigger "Failed to set component on issue: ${e2}"
+        }
+    } catch (e) {
+        errorHandler.trigger "Failed to set component on issue: ${e}"
+    }
+}
+
+private void doSetComponent(String name) {
+    jiraEditIssue idOrKey: issueId(), issue: [fields: [components: [[name: name]]]]
+}
+
+void newComponent(String name) {
+    try {
+        jiraNewComponent component: [name: name, project: projectKey()]
+    } catch (e) {
+        errorHandler.trigger "Failed to create new component '$name': ${e}"
+    }
+}
+
+private List<String> issuesWithStatus(int status, String component) {
+    try {
+        def response = jiraJqlSearch jql: "status = ${status} and component = '${component}'"
+        response.data.issues['key'] as List<String>
+    } catch (e) {
+        errorHandler.trigger "Failed to get list of issues with status ${status}: ${e}"
+    }
+}
+
+/**
+ * Issues that should be manually verified are those that belong to the given component and have a status indicating
+ * they are under manual verification or have been manually verified without success but are not closed.
+ * These issues will have their status set to <i>manualVerification</i> and the given fix version in order to be
+ * manually verified again.
+ * @param fixVersion
+ * @param component
+ */
+void updateIssuesForManualVerification(def version, String component) {
+    issuesWithStatus(config.statuses.manualVerification, component).each { issueId ->
+        fixVersion issueId, version
+    }
+    issuesWithStatus(config.statuses.manualVerificationOk, component).each { issueId ->
+        fixVersion issueId, version
+    }
+    issuesWithStatus(config.statuses.manualVerificationFailed, component).each { issueId ->
+        fixVersion issueId, version
+        changeIssueStatus issueId, config.transitions.retryManualVerificationFromFailure
+    }
+}
 
 String issueId() {
     env.BRANCH_NAME.tokenize('/')[-1]
 }
 
-String issueStatus() {
+private void newVersion(def version) {
     try {
-        jiraGetIssue(idOrKey: issueId()).data.fields['status']['id']
+        jiraNewVersion version: [name: version, project: projectKey()]
+    } catch (e) {
+        errorHandler.trigger "Failed to create new fix version: ${e.message}"
+    }
+}
+
+void createAndSetFixVersion(def version) {
+    newVersion version
+    fixVersion version
+}
+
+void fixVersion(def version) {
+    fixVersion issueId(), version
+}
+
+void fixVersion(String issueId, def version) {
+    List<String> fixVersionsToKeep = fixVersions(issueId).findAll({ it -> !it.matches("\\d{4}-\\d{2}-\\d{2}-.*")})
+    fixVersionsToKeep.add((String)version)
+    def versions = fixVersionsToKeep.collect({it -> [name: it]})
+    try {
+        jiraEditIssue idOrKey: issueId, issue: [fields: [fixVersions: versions]]
+    } catch (e) {
+        errorHandler.trigger "Failed to set fix version ${version} on issue ${issueId}: ${e.message}"
+    }
+}
+
+List<String> fixVersions() {
+    return fixVersions(issueId())
+}
+
+
+List<String> fixVersions(String issueId) {
+    try {
+        jiraGetIssue(idOrKey: issueId).data.fields['fixVersions']['name'] as List
+    } catch (e) {
+        errorHandler.trigger "Failed to get fix version: ${e.message}"
+    }
+}
+
+String issueStatus(def issueId) {
+    try {
+        jiraGetIssue(idOrKey: issueId).data.fields['status']['id']
     } catch (e) {
         errorHandler.trigger "Failed to get issue status: ${e.message}"
     }
 }
 
 boolean issueStatusIs(def targetStatus) {
-    issueStatus() == targetStatus as String
+    issueStatusIs issueId(), targetStatus
+}
+
+boolean issueStatusIs(def issueId, def targetStatus) {
+    issueStatus(issueId) == targetStatus as String
 }
 
 String issueSummary() {
     try {
         jiraGetIssue(idOrKey: issueId()).data.fields['summary']
+    } catch (e) {
+        errorHandler.trigger "Failed to get issue summary: ${e.message}"
+    }
+}
+
+String projectKey() {
+    try {
+        jiraGetIssue(idOrKey: issueId()).data.fields['project']['key']
     } catch (e) {
         errorHandler.trigger "Failed to get issue summary: ${e.message}"
     }
@@ -85,18 +199,28 @@ void waitUntilManualVerificationIsStarted() {
     waitUntilIssueStatusIs config.statuses.manualVerification
 }
 
-void waitUntilManualVerificationIsFinished() {
-    echo "Waiting for issue status to change from 'manual verification'..."
-    waitUntilIssueStatusIsNot config.statuses.manualVerification
-}
-
-void assertManualVerificationWasSuccessful() {
-    ensureIssueStatusIs config.statuses.manualVerificationOk
+void waitUntilManualVerificationIsFinishedAndAssertSuccess(String component) {
+    List<String> issues = issuesWithStatus config.statuses.manualVerification, component
+    echo """Waiting for following issues to complete manual verification:
+            ${issues.stream().sorted().collect(joining("\n"))}
+    """
+    issues.each { issueId ->
+        echo "Waiting for issue status to change from 'manual verification' for ${issueId}..."
+        waitUntilIssueStatusIsNot issueId, config.statuses.manualVerification
+    }
+    issues.each { issueId ->
+        echo "Assert manual verification was approved for ${issueId}"
+        ensureIssueStatusIs issueId, config.statuses.manualVerificationOk
+    }
 }
 
 private void changeIssueStatus(def transitionId) {
+    changeIssueStatus issueId(), transitionId
+}
+
+private void changeIssueStatus(String issueId, def transitionId) {
     try {
-        jiraTransitionIssue idOrKey: issueId(), input: [transition: [id: transitionId]]
+        jiraTransitionIssue idOrKey: issueId, input: [transition: [id: transitionId]]
     } catch (e) {
         errorHandler.trigger "Failed to move issue to '${transitionName transitionId}': ${e.message}"
     }
@@ -136,13 +260,17 @@ private void waitUntilIssueStatusIs(def targetStatus) {
 }
 
 private void waitUntilIssueStatusIsNot(def targetStatus) {
+    waitUntilIssueStatusIsNot issueId(), targetStatus
+}
+
+private void waitUntilIssueStatusIsNot(def issueId, def targetStatus) {
     env.jobAborted = 'false'
     try {
         int counter = 0
-        while (issueStatusIs(targetStatus)) {
+        while (issueStatusIs(issueId, targetStatus)) {
             if (counter == 30) {
                 counter = 0
-                echo "Still waiting for issue status to change..."
+                echo "Still waiting for issue status to change for issue ${issueId}..."
             }
             sleep 10
             counter++
@@ -154,8 +282,12 @@ private void waitUntilIssueStatusIsNot(def targetStatus) {
 }
 
 private void ensureIssueStatusIs(def issueStatus) {
-    if (!issueStatusIs(issueStatus))
-        errorHandler.trigger "Issue status is not ${issueStatus}"
+    ensureIssueStatusIs issueId(), issueStatus
+}
+
+private void ensureIssueStatusIs(def issueId, def issueStatus) {
+    if (!issueStatusIs(issueId, issueStatus))
+        errorHandler.trigger "Issue status for ${issueId} is not ${issueStatus}"
 }
 
 

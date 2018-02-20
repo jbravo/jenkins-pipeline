@@ -57,6 +57,7 @@ def call(body) {
                 steps {
                     script {
                         currentBuild.description = "Building from commit " + git.readCommitId()
+                        jira.setComponent projectName
                         jira.startWork()
                         dockerClient.verify()
                     }
@@ -270,6 +271,7 @@ def call(body) {
                     failIfJobIsAborted()
                     failIfCodeNotApproved()
                     script {
+                        jira.createAndSetFixVersion env.version
                         git.integrateCode params.gitSshKey
                     }
                 }
@@ -314,6 +316,7 @@ def call(body) {
                         steps {
                             script {
                                 git.checkoutVerificationBranch()
+                                jira.updateIssuesForManualVerification env.version, projectName
                                 dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
                                 jira.startManualVerification()
                             }
@@ -337,10 +340,9 @@ def call(body) {
                         steps {
                             script {
                                 jira.waitUntilManualVerificationIsStarted()
-                                failIfJobIsAborted()
-                                jira.waitUntilManualVerificationIsFinished()
-                                failIfJobIsAborted()
-                                jira.assertManualVerificationWasSuccessful()
+                                jira.waitUntilManualVerificationIsFinishedAndAssertSuccess projectName
+                                if (!jira.fixVersions().contains(env.version))
+                                    env.verification = 'false'
                             }
                         }
                     }
@@ -357,6 +359,7 @@ def call(body) {
                 }
                 steps {
                     script {
+                        failIfJobIsAborted()
                         git.checkoutVerificationBranch()
                         dockerClient.buildAndPublish params.productionEnvironment, env.version
                     }
