@@ -1,7 +1,6 @@
-@Library('jenkins-pipeline@work/PBLEID-15722') _
+@Library('jenkins-pipeline@work/PBLEID-15152') _
 
 pipelineWithDocker {
-    stagingEnvironment = 'public-delivery'
     productionEnvironment = 'public-delivery'
     gitSshKey = 'ssh.github.com'
 }

@@ -36,7 +36,7 @@ void newComponent(String name) {
     }
 }
 
-private List<String> issuesWithStatus(int status, String component) {
+private List<String> issuesWithStatus(def status, String component) {
     try {
         def response = jiraJqlSearch jql: "status = ${status} and component = '${component}'"
         response.data.issues['key'] as List<String>
@@ -105,15 +105,23 @@ List<String> fixVersions() {
 
 List<String> fixVersions(String issueId) {
     try {
-        jiraGetIssue(idOrKey: issueId).data.fields['fixVersions']['name'] as List
+        issueFields(issueId)['fixVersions']['name'] as List
     } catch (e) {
         errorHandler.trigger "Failed to get fix version: ${e.message}"
     }
 }
 
+Map issueFields(def issueId) {
+    try {
+        jiraGetIssue(idOrKey: issueId).data.fields
+    } catch (e) {
+        errorHandler.trigger "Failed to get issue fields: ${e.message}"
+    }
+}
+
 String issueStatus(def issueId) {
     try {
-        jiraGetIssue(idOrKey: issueId).data.fields['status']['id']
+        issueStatus issueFields(issueId)
     } catch (e) {
         errorHandler.trigger "Failed to get issue status: ${e.message}"
     }
@@ -129,18 +137,39 @@ boolean issueStatusIs(def issueId, def targetStatus) {
 
 String issueSummary() {
     try {
-        jiraGetIssue(idOrKey: issueId()).data.fields['summary']
+        issueSummary issueFields(issueId())
     } catch (e) {
         errorHandler.trigger "Failed to get issue summary: ${e.message}"
     }
 }
 
 String projectKey() {
+    projectKey issueId()
+}
+
+String projectKey(String issueId) {
     try {
-        jiraGetIssue(idOrKey: issueId()).data.fields['project']['key']
+        projectKey issueFields(issueId)
     } catch (e) {
         errorHandler.trigger "Failed to get issue summary: ${e.message}"
     }
+}
+
+static String issueStatus(Map issueFields) {
+    issueFields['status']['id']
+}
+
+static String issueSummary(Map issueFields) {
+    issueFields['summary']
+}
+
+
+static String projectKey(Map issueFields) {
+    issueFields['project']['key']
+}
+
+static String components(Map issueFields) {
+    issueFields['components']
 }
 
 void readyForCodeReview() {
@@ -208,9 +237,35 @@ void waitUntilManualVerificationIsFinishedAndAssertSuccess(String component) {
         echo "Waiting for issue status to change from 'manual verification' for ${issueId}..."
         waitUntilIssueStatusIsNot issueId, config.statuses.manualVerification
     }
+    List<String> failedIssues = new ArrayList<>()
     issues.each { issueId ->
-        echo "Assert manual verification was approved for ${issueId}"
-        ensureIssueStatusIs issueId, config.statuses.manualVerificationOk
+        echo "Checking issue status for ${issueId}..."
+        if (issueStatus(issueId) == config.statuses.manualVerificationFailed) {
+            echo "Issue ${issueId} failed verification -- creating a bug issue"
+            createBugForFailedVerification issueId
+            failedIssues.add issueId
+        }
+    }
+    if (!failedIssues.isEmpty()) {
+        errorHandler.trigger "Following issues failed verification: ${failedIssues}"
+    } else {
+        echo "All issues were successfully verified: ${issues}"
+    }
+}
+
+private void createBugForFailedVerification(def issueId) {
+    try {
+        Map issueFields = issueFields issueId
+        def response = jiraNewIssue issue: [fields: [
+                project: [key: projectKey(issueFields)],
+                summary: "Manual verification of ${issueId} failed",
+                issuetype: [id: config.issues.bug],
+                components: components(issueFields),
+                description: "Manual verification failed for issue ${issueId}. Check the build log at ${BUILD_URL}console."
+        ]]
+        jiraLinkIssues type: config.issueLinks.failedVerification, inwardKey: response.data.key, outwardKey: issueId
+    } catch (e) {
+        echo "Failed to create bug for issue ${issueId} that failed verification: ${e}"
     }
 }
 

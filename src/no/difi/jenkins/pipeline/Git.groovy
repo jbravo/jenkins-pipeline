@@ -32,6 +32,7 @@ void waitForAvailableVerificationSlot(def sshKey) {
 }
 
 void createVerificationBranch(String logEntry, String sshKey) {
+    logEntry = logEntry.replaceAll('"', '\\\\"')
     sshagent([sshKey]) {
         return sh(returnStdout: true, script: """#!/usr/bin/env bash
     
