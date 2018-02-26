@@ -64,7 +64,8 @@ def call(body) {
                 steps {
                     script {
                         currentBuild.description = "Building from commit " + git.readCommitId()
-                        jira.setComponent projectName
+                        env.sourceCodeRepository = env.GIT_URL
+                        jira.setSourceCodeRepository env.sourceCodeRepository
                         jira.startWork()
                         maven.verify params.MAVEN_OPTS
                     }
@@ -445,7 +446,7 @@ def call(body) {
                         steps {
                             script {
                                 git.checkoutVerificationBranch()
-                                jira.updateIssuesForManualVerification env.version, projectName
+                                jira.updateIssuesForManualVerification env.version, env.sourceCodeRepository
                                 if (params.stagingEnvironmentType == 'puppet') {
                                     puppet.deploy params.stagingEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
                                 } else if (params.stagingEnvironmentType == 'docker') {
@@ -473,7 +474,7 @@ def call(body) {
                         steps {
                             script {
                                 jira.waitUntilManualVerificationIsStarted()
-                                jira.waitUntilManualVerificationIsFinishedAndAssertSuccess projectName
+                                jira.waitUntilManualVerificationIsFinishedAndAssertSuccess env.sourceCodeRepository
                                 if (!jira.fixVersions().contains(env.version))
                                     env.verification = 'false'
                             }

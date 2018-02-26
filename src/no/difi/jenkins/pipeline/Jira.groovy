@@ -8,37 +8,27 @@ import static java.util.stream.Collectors.joining
 Map config
 ErrorHandler errorHandler
 
-void setComponent(String name) {
+void setSourceCodeRepository(def repository) {
     try {
-        doSetComponent name
-    } catch (AbortException e) {
-        echo "Seems like component '${name} does not exist. Creating it..."
-        newComponent name
-        try {
-            doSetComponent name
-        } catch (e2) {
-            errorHandler.trigger "Failed to set component on issue: ${e2}"
-        }
+        setField(config.fields.sourceCodeRepository, repository)
     } catch (e) {
-        errorHandler.trigger "Failed to set component on issue: ${e}"
+        errorHandler.trigger "Failed to set source code repository on issue: ${e}"
     }
 }
 
-private void doSetComponent(String name) {
-    jiraEditIssue idOrKey: issueId(), issue: [fields: [components: [[name: name]]]]
-}
-
-void newComponent(String name) {
+private void setField(def field, def value) {
+    Map fields = [:]
+    fields.put(field, value)
     try {
-        jiraNewComponent component: [name: name, project: projectKey()]
+        jiraEditIssue idOrKey: issueId(), issue: [fields: fields]
     } catch (e) {
-        errorHandler.trigger "Failed to create new component '$name': ${e}"
+        errorHandler.trigger "Failed to set field ${field} on issue: ${e}"
     }
 }
 
-private List<String> issuesWithStatus(def status, String component) {
+private List<String> issuesWithStatus(def status, def repository) {
     try {
-        def response = jiraJqlSearch jql: "status = ${status} and component = '${component}'"
+        def response = jiraJqlSearch jql: "status = ${status} and ${config.fields.sourceCodeRepository} = '${repository}'"
         response.data.issues['key'] as List<String>
     } catch (e) {
         errorHandler.trigger "Failed to get list of issues with status ${status}: ${e}"
@@ -46,21 +36,21 @@ private List<String> issuesWithStatus(def status, String component) {
 }
 
 /**
- * Issues that should be manually verified are those that belong to the given component and have a status indicating
+ * Issues that should be manually verified are those that belong to the given repository and have a status indicating
  * they are under manual verification or have been manually verified without success but are not closed.
  * These issues will have their status set to <i>manualVerification</i> and the given fix version in order to be
  * manually verified again.
- * @param fixVersion
- * @param component
+ * @param version
+ * @param repository
  */
-void updateIssuesForManualVerification(def version, String component) {
-    issuesWithStatus(config.statuses.manualVerification, component).each { issueId ->
+void updateIssuesForManualVerification(def version, def repository) {
+    issuesWithStatus(config.statuses.manualVerification, repository).each { issueId ->
         fixVersion issueId, version
     }
-    issuesWithStatus(config.statuses.manualVerificationOk, component).each { issueId ->
+    issuesWithStatus(config.statuses.manualVerificationOk, repository).each { issueId ->
         fixVersion issueId, version
     }
-    issuesWithStatus(config.statuses.manualVerificationFailed, component).each { issueId ->
+    issuesWithStatus(config.statuses.manualVerificationFailed, repository).each { issueId ->
         fixVersion issueId, version
         changeIssueStatus issueId, config.transitions.retryManualVerificationFromFailure
     }
@@ -192,10 +182,6 @@ void startManualVerification() {
     changeIssueStatus config.transitions.startManualVerification
 }
 
-void approveManualVerification() {
-    changeIssueStatus config.transitions.approveManualVerification
-}
-
 void resumeWork() {
     changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
     changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
@@ -228,8 +214,8 @@ void waitUntilManualVerificationIsStarted() {
     waitUntilIssueStatusIs config.statuses.manualVerification
 }
 
-void waitUntilManualVerificationIsFinishedAndAssertSuccess(String component) {
-    List<String> issues = issuesWithStatus config.statuses.manualVerification, component
+void waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepository) {
+    List<String> issues = issuesWithStatus config.statuses.manualVerification, sourceCodeRepository
     echo """Waiting for following issues to complete manual verification:
             ${issues.stream().sorted().collect(joining("\n"))}
     """
@@ -256,13 +242,14 @@ void waitUntilManualVerificationIsFinishedAndAssertSuccess(String component) {
 private void createBugForFailedVerification(def issueId) {
     try {
         Map issueFields = issueFields issueId
-        def response = jiraNewIssue issue: [fields: [
-                project: [key: projectKey(issueFields)],
-                summary: "Manual verification of ${issueId} failed",
-                issuetype: [id: config.issues.bug],
-                components: components(issueFields),
-                description: "Manual verification failed for issue ${issueId}. Check the build log at ${BUILD_URL}console."
-        ]]
+        Map newFields = [:]
+        newFields.put('project', [key: projectKey(issueFields)])
+        newFields.put('summary', "Manual verification of ${issueId} failed")
+        newFields.put('issuetype', [id: config.issues.bug])
+        newFields.put('components', components(issueFields))
+        newFields.put(config.fields.sourceCodeRepository, issueFields.get(config.fields.sourceCodeRepository))
+        newFields.put('description', "Manual verification failed for issue ${issueId}. Check the build log at ${BUILD_URL}console.")
+        def response = jiraNewIssue issue: [fields: newFields]
         jiraLinkIssues type: config.issueLinks.failedVerification, inwardKey: response.data.key, outwardKey: issueId
     } catch (e) {
         echo "Failed to create bug for issue ${issueId} that failed verification: ${e}"
@@ -335,16 +322,6 @@ private void waitUntilIssueStatusIsNot(def issueId, def targetStatus) {
         env.jobAborted = "true"
     }
 }
-
-private void ensureIssueStatusIs(def issueStatus) {
-    ensureIssueStatusIs issueId(), issueStatus
-}
-
-private void ensureIssueStatusIs(def issueId, def issueStatus) {
-    if (!issueStatusIs(issueId, issueStatus))
-        errorHandler.trigger "Issue status for ${issueId} is not ${issueStatus}"
-}
-
 
 void addComment(String comment) {
     try {
