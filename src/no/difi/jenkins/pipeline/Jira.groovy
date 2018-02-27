@@ -10,7 +10,7 @@ ErrorHandler errorHandler
 
 void setSourceCodeRepository(def repository) {
     try {
-        setField(config.fields.sourceCodeRepository, repository)
+        setField("customfield_${config.fields.sourceCodeRepository}", repository)
     } catch (e) {
         errorHandler.trigger "Failed to set source code repository on issue: ${e}"
     }
@@ -28,7 +28,7 @@ private void setField(def field, def value) {
 
 private List<String> issuesWithStatus(def status, def repository) {
     try {
-        def response = jiraJqlSearch jql: "status = ${status} and ${config.fields.sourceCodeRepository} = '${repository}'"
+        def response = jiraJqlSearch jql: "status = ${status} and cf[${config.fields.sourceCodeRepository}] ~ '${repository}'"
         response.data.issues['key'] as List<String>
     } catch (e) {
         errorHandler.trigger "Failed to get list of issues with status ${status}: ${e}"
@@ -247,7 +247,6 @@ private void createBugForFailedVerification(def issueId) {
         newFields.put('summary', "Manual verification of ${issueId} failed")
         newFields.put('issuetype', [id: config.issues.bug])
         newFields.put('components', components(issueFields))
-        newFields.put(config.fields.sourceCodeRepository, issueFields.get(config.fields.sourceCodeRepository))
         newFields.put('description', "Manual verification failed for issue ${issueId}. Check the build log at ${BUILD_URL}console.")
         def response = jiraNewIssue issue: [fields: newFields]
         jiraLinkIssues type: config.issueLinks.failedVerification, inwardKey: response.data.key, outwardKey: issueId
