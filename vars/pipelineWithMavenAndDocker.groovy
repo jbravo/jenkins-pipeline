@@ -16,6 +16,7 @@ def call(body) {
     String projectName = JOB_NAME.tokenize('/')[0]
     String stagingLock = projectName + '-staging'
     String productionLock = projectName + '-production'
+    String agentImage = 'difi/jenkins-agent'
     String agentArgs = '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
             '--network pipeline_pipeline ' +
             '-v /var/run/docker.sock:/var/run/docker.sock ' +
@@ -27,6 +28,8 @@ def call(body) {
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
+    if (params.javaVersion == 9)
+        agentImage = 'difi/jenkins-agent-java9'
     if (!params.stagingQueue) {
         stagingLock += "-${BRANCH_NAME}"
     }
@@ -57,7 +60,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -93,7 +96,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -124,7 +127,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -154,7 +157,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -190,7 +193,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -222,7 +225,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -257,7 +260,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -308,7 +311,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -357,7 +360,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -391,7 +394,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -439,7 +442,7 @@ def call(body) {
                         agent {
                             docker {
                                 label 'slave'
-                                image 'difi/jenkins-agent'
+                                image agentImage
                                 args agentArgs
                             }
                         }
@@ -487,7 +490,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -527,7 +530,7 @@ def call(body) {
                         agent {
                             docker {
                                 label 'slave'
-                                image 'difi/jenkins-agent'
+                                image agentImage
                                 args agentArgs
                             }
                         }
@@ -561,7 +564,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }

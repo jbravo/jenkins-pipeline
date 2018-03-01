@@ -11,6 +11,7 @@ def call(body) {
     String projectName = JOB_NAME.tokenize('/')[0]
     String stagingLock = projectName + '-staging'
     String productionLock = projectName + '-production'
+    String agentImage = 'difi/jenkins-agent'
     String agentArgs = '--network pipeline_pipeline ' +
             '-v /var/run/docker.sock:/var/run/docker.sock ' +
             '--mount type=volume,src=jenkins-ssh-settings,dst=/etc/ssh ' +
@@ -50,7 +51,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -81,7 +82,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -112,7 +113,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -139,7 +140,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -171,7 +172,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -206,7 +207,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -230,7 +231,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -264,7 +265,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -310,7 +311,7 @@ def call(body) {
                         agent {
                             docker {
                                 label 'slave'
-                                image 'difi/jenkins-agent'
+                                image agentImage
                                 args agentArgs
                             }
                         }
@@ -354,7 +355,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
@@ -394,7 +395,7 @@ def call(body) {
                         agent {
                             docker {
                                 label 'slave'
-                                image 'difi/jenkins-agent'
+                                image agentImage
                                 args agentArgs
                             }
                         }
@@ -424,7 +425,7 @@ def call(body) {
                 agent {
                     docker {
                         label 'slave'
-                        image 'difi/jenkins-agent'
+                        image agentImage
                         args agentArgs
                     }
                 }
