@@ -321,7 +321,7 @@ private void changeIssueStatus(def sourceStatus, def transitionId) {
 }
 
 private PollResponse pollUntilIssueStatusIs(def targetStatus) {
-    String callbackId = UUID.randomUUID().toString()
+    String callbackId = callbackId()
     try {
         String pollId = httpRequest(
                 url: pollingAgentUrl(),
@@ -349,7 +349,7 @@ private PollResponse pollUntilIssueStatusIsNot(def targetStatus) {
 }
 
 private PollResponse pollUntilIssueStatusIsNot(def issueId, def targetStatus) {
-    String callbackId = UUID.randomUUID().toString()
+    String callbackId = callbackId()
     try {
         String pollId = httpRequest(
                 url: pollingAgentUrl(),
@@ -370,6 +370,10 @@ private PollResponse pollUntilIssueStatusIsNot(def issueId, def targetStatus) {
         env.jobAborted = 'true'
         null
     }
+}
+
+private String callbackId() {
+    UUID.randomUUID().toString().toUpperCase() // Upper-casing as a workaround because Jenkins upper-cases first letter of the id
 }
 
 private String callbackAddress(String callbackId) {
