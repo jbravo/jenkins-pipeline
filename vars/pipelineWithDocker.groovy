@@ -222,7 +222,6 @@ def call(body) {
                 steps {
                     script {
                         jira.waitUntilCodeReviewIsFinished()
-                        env.codeApproved = String.valueOf(jira.isCodeApproved())
                     }
                 }
             }
@@ -237,8 +236,8 @@ def call(body) {
                 }
                 steps {
                     failIfJobIsAborted()
-                    failIfCodeNotApproved()
                     script {
+                        jira.failIfCodeNotApproved()
                         git.checkoutVerificationBranch()
                         dockerClient.buildAndPublish params.stagingEnvironment, env.version
                     }
@@ -271,8 +270,8 @@ def call(body) {
                 }
                 steps {
                     failIfJobIsAborted()
-                    failIfCodeNotApproved()
                     script {
+                        jira.failIfCodeNotApproved()
                         jira.createAndSetFixVersion env.version
                         git.integrateCode params.gitSshKey
                     }
@@ -341,8 +340,8 @@ def call(body) {
                     stage('Wait for approval') {
                         steps {
                             script {
-                                jira.waitUntilManualVerificationIsStarted()
-                                jira.waitUntilManualVerificationIsFinishedAndAssertSuccess env.sourceCodeRepository
+                                if (!jira.waitUntilManualVerificationIsStarted()) return
+                                if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
                                 if (!jira.fixVersions().contains(env.version))
                                     env.verification = 'false'
                             }
@@ -431,6 +430,7 @@ def call(body) {
                 }
                 steps {
                     script {
+                        failIfJobIsAborted()
                         jira.close()
                         git.deleteWorkBranch(params.gitSshKey)
                     }

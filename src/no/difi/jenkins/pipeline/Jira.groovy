@@ -1,6 +1,5 @@
 package no.difi.jenkins.pipeline
 
-import hudson.AbortException
 import org.jenkinsci.plugins.workflow.steps.FlowInterruptedException
 
 import static java.util.stream.Collectors.joining
@@ -195,33 +194,46 @@ void close() {
     changeIssueStatus config.statuses.manualVerificationOk, config.transitions.close
 }
 
-void waitUntilVerificationIsStarted() {
+boolean waitUntilVerificationIsStarted() {
     echo "Waiting for issue status to change to 'code review'..."
-    waitUntilIssueStatusIs config.statuses.codeReview
+    PollResponse pollResponse = pollUntilIssueStatusIs(config.statuses.codeReview)
+    if (pollResponse == null) return false
+    waitForCallback(pollResponse)
 }
 
-void waitUntilCodeReviewIsFinished() {
+boolean waitUntilCodeReviewIsFinished() {
     echo "Waiting for issue status to change from 'code review'..."
-    waitUntilIssueStatusIsNot config.statuses.codeReview
+    PollResponse pollResponse = pollUntilIssueStatusIsNot config.statuses.codeReview
+    if (pollResponse == null) return false
+    waitForCallback(pollResponse)
 }
 
-boolean isCodeApproved() {
+void failIfCodeNotApproved() {
+    if (!isCodeApproved())
+        error("Code was not approved")
+}
+
+private boolean isCodeApproved() {
     issueStatusIs config.statuses.codeApproved
 }
 
-void waitUntilManualVerificationIsStarted() {
+boolean waitUntilManualVerificationIsStarted() {
     echo "Waiting for issue status to change to 'manual verification'..."
-    waitUntilIssueStatusIs config.statuses.manualVerification
+    PollResponse pollResponse = pollUntilIssueStatusIs config.statuses.manualVerification
+    if (pollResponse == null) return false
+    waitForCallback(pollResponse)
 }
 
-void waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepository) {
+boolean waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepository) {
     List<String> issues = issuesWithStatus config.statuses.manualVerification, sourceCodeRepository
     echo """Waiting for following issues to complete manual verification:
             ${issues.stream().sorted().collect(joining("\n"))}
     """
     issues.each { issueId ->
         echo "Waiting for issue status to change from 'manual verification' for ${issueId}..."
-        waitUntilIssueStatusIsNot issueId, config.statuses.manualVerification
+        PollResponse pollResponse = pollUntilIssueStatusIsNot issueId, config.statuses.manualVerification
+        if (pollResponse == null) return false
+        if (!waitForCallback(pollResponse)) return false
     }
     List<String> failedIssues = new ArrayList<>()
     issues.each { issueId ->
@@ -233,9 +245,35 @@ void waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeReposit
         }
     }
     if (!failedIssues.isEmpty()) {
-        errorHandler.trigger "Following issues failed verification: ${failedIssues}"
+        echo "Following issues failed verification: ${failedIssues}"
+        false
     } else {
         echo "All issues were successfully verified: ${issues}"
+        true
+    }
+}
+
+private boolean waitForCallback(PollResponse pollResponse) {
+    try {
+        input message: 'Waiting for callback from polling-agent', id: pollResponse.callbackId()
+        true
+    } catch (FlowInterruptedException e) {
+        echo "Waiting for callback was aborted"
+        env.jobAborted = 'true'
+        false
+    } finally {
+        deletePollJob pollResponse.pollId()
+    }
+}
+
+private void deletePollJob(String pollId) {
+    try {
+        httpRequest(
+                url: "http://polling-agent/jiraStatusPolls/${pollId}",
+                httpMode: 'DELETE'
+        )
+    } catch (e) {
+        echo "Failed to delete poll job ${pollId}: ${e}"
     }
 }
 
@@ -282,44 +320,68 @@ private void changeIssueStatus(def sourceStatus, def transitionId) {
     }
 }
 
-private void waitUntilIssueStatusIs(def targetStatus) {
-    env.jobAborted = 'false'
+private PollResponse pollUntilIssueStatusIs(def targetStatus) {
+    String callbackId = UUID.randomUUID().toString()
     try {
-        int counter = 0
-        while (!issueStatusIs(targetStatus)) {
-            if (counter == 30) {
-                counter = 0
-                echo "Still waiting for issue status to change..."
-            }
-            sleep 10
-            counter++
-        }
-    } catch (FlowInterruptedException e) {
-        echo "Waiting was aborted"
-        env.jobAborted = "true"
+        String pollId = httpRequest(
+                url: pollingAgentUrl(),
+                httpMode: 'POST',
+                contentType: 'APPLICATION_JSON_UTF8',
+                requestBody: """
+                {
+                    "jiraAddress": "${config.url}",
+                    "callbackAddress": "${callbackAddress(callbackId)}",
+                    "positiveTargetStatus": "${targetStatus}",
+                    "issue": "${issueId()}"
+                }
+                """
+        ).content
+        new PollResponse(pollId: pollId, callbackId: callbackId)
+    } catch (e) {
+        echo "Initiating polling failed: ${e}"
+        env.jobAborted = 'true'
+        null
     }
 }
 
-private void waitUntilIssueStatusIsNot(def targetStatus) {
-    waitUntilIssueStatusIsNot issueId(), targetStatus
+private PollResponse pollUntilIssueStatusIsNot(def targetStatus) {
+    pollUntilIssueStatusIsNot issueId(), targetStatus
 }
 
-private void waitUntilIssueStatusIsNot(def issueId, def targetStatus) {
-    env.jobAborted = 'false'
+private PollResponse pollUntilIssueStatusIsNot(def issueId, def targetStatus) {
+    String callbackId = UUID.randomUUID().toString()
     try {
-        int counter = 0
-        while (issueStatusIs(issueId, targetStatus)) {
-            if (counter == 30) {
-                counter = 0
-                echo "Still waiting for issue status to change for issue ${issueId}..."
-            }
-            sleep 10
-            counter++
-        }
-    } catch (FlowInterruptedException e) {
-        echo "Waiting was aborted"
-        env.jobAborted = "true"
+        String pollId = httpRequest(
+                url: pollingAgentUrl(),
+                httpMode: 'POST',
+                contentType: 'APPLICATION_JSON_UTF8',
+                requestBody: """
+                {
+                    "jiraAddress": "${config.url}",
+                    "callbackAddress": "${callbackAddress(callbackId)}",
+                    "negativeTargetStatus": "${targetStatus}",
+                    "issue": "${issueId}"
+                }
+                """
+        ).content
+        new PollResponse(pollId: pollId, callbackId: callbackId)
+    } catch (e) {
+        echo "Initiating polling failed: ${e}"
+        env.jobAborted = 'true'
+        null
     }
+}
+
+private String callbackAddress(String callbackId) {
+    "${internalBuildUrl()}input/${callbackId}/proceedEmpty"
+}
+
+private String internalBuildUrl() {
+    "${BUILD_URL}".replaceFirst("${JENKINS_URL}", 'http://jenkins:8080/')
+}
+
+private static String pollingAgentUrl() {
+    'http://polling-agent/jiraStatusPolls'
 }
 
 void addComment(String comment) {
