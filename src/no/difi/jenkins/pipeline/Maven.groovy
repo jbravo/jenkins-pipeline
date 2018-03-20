@@ -4,6 +4,7 @@ import groovy.json.JsonSlurperClassic
 import groovy.text.SimpleTemplateEngine
 
 Docker docker
+Environments environments
 
 void verify(def options) {
     String settingsFile = settingsFile()
@@ -12,30 +13,70 @@ void verify(def options) {
     sh "rm ${settingsFile}"
 }
 
-void deployDockerAndJava(
-        def version, def mavenOptions, def parallel,
-        def swarmId,
-        def javaRepository, def javaUserName, def javaPassword
+void deliver(
+        def version, def mavenOptions, def parallel, def environmentId
 ) {
-    currentBuild.description = "Publishing artifacts with version ${version} from commit ${GIT_COMMIT}"
-    String settingsFile = null
+    currentBuild.description = "Delivery: version ${version}, commit ${GIT_COMMIT}, environment ${environmentId}"
+    if (environments.isDockerDeliverySupported(environmentId)) {
+        deliverDockerAndJava(version, mavenOptions, parallel, environmentId)
+    } else {
+        deliverJava(version, mavenOptions, parallel, environmentId)
+    }
+}
+
+private void deliverDockerAndJava(
+        def version, def mavenOptions, def parallel, def environmentId
+) {
     withCredentials([usernamePassword(
-            credentialsId: docker.registryCredentialsId(swarmId),
+            credentialsId: environments.dockerRegistryCredentialsId(environmentId),
             passwordVariable: 'dockerPassword',
             usernameVariable: 'dockerUsername')]
     ) {
-        settingsFile = settingsFileWithDockerAndJava docker.registryAddressForSwarm(swarmId), env.dockerUsername, env.dockerPassword, "javaRepository", javaUserName, javaPassword
+        withCredentials([usernamePassword(
+                credentialsId: environments.mavenRepositoryCredentialsId(environmentId),
+                passwordVariable: 'mavenPassword',
+                usernameVariable: 'mavenUsername')]
+        ) {
+            String settingsFile = settingsFileWithDockerAndJava(
+                    environments.dockerRegistryAddress(environmentId),
+                    env.dockerUsername,
+                    env.dockerPassword,
+                    "javaRepository",
+                    env.mavenUsername,
+                    env.mavenPassword
+            )
+            deploy(
+                    version,
+                    mavenOptions,
+                    parallel,
+                    environments.mavenRepositoryAddress(environmentId),
+                    settingsFile
+            )
+        }
     }
-    deploy version, mavenOptions, parallel, javaRepository, settingsFile
 }
 
-void deployJava(
-        def version, def mavenOptions, def parallel,
-        def javaRepository, def javaUserName, def javaPassword
+private void deliverJava(
+        def version, def mavenOptions, def parallel, def environmentId
 ) {
-    currentBuild.description = "Publishing artifacts with version ${version} from commit ${GIT_COMMIT}"
-    String settingsFile = settingsFileWithJava "javaRepository", javaUserName, javaPassword
-    deploy version, mavenOptions, parallel, javaRepository, settingsFile
+    withCredentials([usernamePassword(
+            credentialsId: environments.mavenRepositoryCredentialsId(environmentId),
+            passwordVariable: 'mavenPassword',
+            usernameVariable: 'mavenUsername')]
+    ) {
+        String settingsFile = settingsFileWithJava(
+                "javaRepository",
+                env.mavenUsername,
+                env.mavenPassword
+        )
+        deploy(
+                version,
+                mavenOptions,
+                parallel,
+                environments.mavenRepositoryAddress(environmentId),
+                settingsFile
+        )
+    }
 }
 
 private void deploy(def version, def mavenOptions, def parallel, def javaRepository, String settingsFile) {
@@ -46,31 +87,33 @@ private void deploy(def version, def mavenOptions, def parallel, def javaReposit
     sh "rm ${settingsFile}"
 }
 
-boolean verificationTestsSupported(def swarmId) {
+boolean verificationTestsSupported(def environmentId) {
+    if (!environments.isDockerDeploySupported(environmentId)) {
+        echo "No Docker swarm defined for environment '${environmentId}' -- skipping tests"
+        return false
+    }
     int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/system-tests ]")
     if (status != 0){
         echo "Verification tests are not supported (no system-tests folder)"
         return false
     }
-    if (docker.config.swarms[swarmId as String]?.host == null) {
-        echo "No host defined for Docker swarm '${swarmId}' -- skipping tests"
-        return false
-    }
     true
 }
 
-VerificationTestResult runVerificationTests(def swarmId, def stackName) {
-    def swarmConfig = docker.config.swarms[swarmId as String]
+VerificationTestResult runVerificationTests(def environmentId, def stackName) {
+    String sshKey = environments.dockerSwarmSshKey(environmentId)
+    String user = environments.dockerSwarmUser(environmentId)
+    String host = environments.dockerSwarmHost(environmentId)
     Map servicePorts = docker.servicePorts(
-            swarmConfig.sshKey, swarmConfig.user, swarmConfig.host, stackName,
+            sshKey, user, host, stackName,
             'eid-atest-admin', 'eid-atest-idp-app', 'selenium', 'eid-atest-db'
     )
     int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
-        -DadminDirectBaseURL=http://${swarmConfig.host}:${servicePorts.get('eid-atest-admin')}/idporten-admin/\
-        -DminIDOnTheFlyUrl=http://${swarmConfig.host}:${servicePorts.get('eid-atest-idp-app')}/minid_filegateway/\
-        -DseleniumUrl=http://${swarmConfig.host}:${servicePorts.get('selenium')}/wd/hub\
-        -DdatabaseUrl=${swarmConfig.host}:${servicePorts.get('eid-atest-db')}
+        -DadminDirectBaseURL=http://${host}:${servicePorts.get('eid-atest-admin')}/idporten-admin/\
+        -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('eid-atest-idp-app')}/minid_filegateway/\
+        -DseleniumUrl=http://${host}:${servicePorts.get('selenium')}/wd/hub\
+        -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db')}
     """
     cucumber 'system-tests/target/cucumber-report.json'
     new VerificationTestResult(
@@ -79,7 +122,12 @@ VerificationTestResult runVerificationTests(def swarmId, def stackName) {
     )
 }
 
-void deletePublished(def version) {
+void deletePublished(def environmentId, def version) {
+    // TODO: Make environment aware (includes Nexus support and repository configuration)
+    if (!environments.isMavenDeletionSupported(environmentId)) {
+        echo "Maven artifact deletion is not supported for environment ${environmentId}"
+        return
+    }
     try {
         echo "Deleting artifacts for version ${version}"
         url = "http://eid-artifactory.dmz.local:8080/artifactory/api/search/gavc?v=${version}&repos=libs-release-local"

@@ -151,9 +151,6 @@ def call(body) {
             }
             stage('Verification deliver (Java)') {
                 when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
-                environment {
-                    nexus = credentials('nexus')
-                }
                 agent {
                     docker {
                         label 'slave'
@@ -164,10 +161,7 @@ def call(body) {
                 steps {
                     script {
                         git.checkoutVerificationBranch()
-                        maven.deployDockerAndJava(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                params.verificationEnvironment,
-                                'http://nexus:8081/repository/maven-releases', env.nexus_USR, env.nexus_PSW
-                        )
+                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.verificationEnvironment)
                     }
                 }
                 post {
@@ -305,8 +299,8 @@ def call(body) {
                     }
                 }
             }
-            stage('Staging/production deliver (Java)') {
-                when { expression { env.verification == 'true' } }
+            stage('Staging deliver (Java)') {
+                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
                 agent {
                     docker {
                         label 'slave'
@@ -314,41 +308,26 @@ def call(body) {
                         args agentArgs
                     }
                 }
-                environment {
-                    artifactory = credentials('artifactory-publish')
-                }
                 steps {
                     failIfJobIsAborted()
                     script {
                         jira.failIfCodeNotApproved()
                         git.checkoutVerificationBranch()
-                        String javaRepository = 'http://eid-artifactory.dmz.local:8080/artifactory/libs-release-local'
-                        if (params.stagingEnvironment != null) {
-                            maven.deployDockerAndJava(
-                                    env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                    params.stagingEnvironment,
-                                    javaRepository, env.artifactory_USR, env.artifactory_PSW
-                            )
-                        } else {
-                            maven.deployJava(
-                                    env.version, params.MAVEN_OPTS, params.parallelMavenDeploy,
-                                    javaRepository, env.artifactory_USR, env.artifactory_PSW
-                            )
-                        }
+                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.stagingEnvironment)
                     }
                 }
                 post {
                     failure {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
@@ -374,7 +353,7 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
@@ -382,7 +361,7 @@ def call(body) {
                         script {
                             git.deleteVerificationBranch(params.gitSshKey)
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
@@ -414,14 +393,14 @@ def call(body) {
                     failure {
                         script {
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished env.version
+                            maven.deletePublished params.stagingEnvironment, env.version
                             jira.resumeWork()
                         }
                     }
@@ -461,12 +440,14 @@ def call(body) {
                             failure {
                                 script {
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
+                                    maven.deletePublished params.stagingEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
                                 }
                             }
                             aborted {
                                 script {
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
+                                    maven.deletePublished params.stagingEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
                                 }
                             }
@@ -484,7 +465,38 @@ def call(body) {
                     }
                 }
             }
-            stage('Production deliver') {
+            stage('Production deliver (Java)') {
+                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
+                agent {
+                    docker {
+                        label 'slave'
+                        image agentImage
+                        args agentArgs
+                    }
+                }
+                steps {
+                    failIfJobIsAborted()
+                    script {
+                        git.checkoutVerificationBranch()
+                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.productionEnvironment)
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            maven.deletePublished params.productionEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
+                        }
+                    }
+                    aborted {
+                        script {
+                            maven.deletePublished params.productionEnvironment, env.version
+                            git.deleteWorkBranch(params.gitSshKey)
+                        }
+                    }
+                }
+            }
+            stage('Production deliver (Docker)') {
                 when { expression { env.verification == 'true' && params.productionEnvironment != null } }
                 agent {
                     docker {
@@ -504,12 +516,14 @@ def call(body) {
                     failure {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
+                            maven.deletePublished params.productionEnvironment, env.version
                             git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
+                            maven.deletePublished params.productionEnvironment, env.version
                             git.deleteWorkBranch(params.gitSshKey)
                         }
                     }
@@ -546,11 +560,15 @@ def call(body) {
                         post {
                             failure {
                                 script {
+                                    dockerClient.deletePublished params.productionEnvironment, env.version
+                                    maven.deletePublished params.productionEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
                                 }
                             }
                             aborted {
                                 script {
+                                    dockerClient.deletePublished params.productionEnvironment, env.version
+                                    maven.deletePublished params.productionEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
                                 }
                             }

@@ -1,13 +1,13 @@
 package no.difi.jenkins.pipeline
 
-Map config
+Environments environments
 
-void deploy(def master, def version, def puppetModules, def librarianModules, def puppetApplyList) {
-    sshagent([config.masters[master as String].sshKey]) {
+void deploy(def environmentId, def version, def puppetModules, def librarianModules, def puppetApplyList) {
+    sshagent([environments.puppetMasterSshKey(environmentId)]) {
         tagPuppetModules(version)
         updateHiera(version, puppetModules)
         updateControl(version, librarianModules)
-        apply(master, librarianModules, puppetApplyList)
+        apply(environmentId, librarianModules, puppetApplyList)
     }
 }
 
@@ -83,9 +83,9 @@ private void updateControl(version, modules) {
     """
 }
 
-private void apply(def master, def librarianModules, def applyParametersList) {
-    def masterHost = config.masters[master as String].host
-    def masterHostUser = config.masters[master as String].user
+private void apply(def environmentId, def librarianModules, def applyParametersList) {
+    def masterHost = environments.puppetMasterHost(environmentId)
+    def masterHostUser = environments.puppetMasterUser(environmentId)
     def librarianFolder = '/etc/puppet/environments/systest'
     def hieraFolder = '/etc/puppet/hieradata'
 
