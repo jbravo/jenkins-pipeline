@@ -181,6 +181,11 @@ void startManualVerification() {
     changeIssueStatus config.transitions.startManualVerification
 }
 
+void stagingFailed() {
+    changeIssueStatus config.statuses.manualVerification, config.transitions.failManualVerification
+    changeIssueStatus config.statuses.codeApproved, config.transitions.failStagingDeploy
+}
+
 void resumeWork() {
     changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
     changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork

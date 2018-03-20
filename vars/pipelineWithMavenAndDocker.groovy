@@ -439,6 +439,7 @@ def call(body) {
                         post {
                             failure {
                                 script {
+                                    jira.stagingFailed()
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
                                     maven.deletePublished params.stagingEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
@@ -446,6 +447,7 @@ def call(body) {
                             }
                             aborted {
                                 script {
+                                    jira.stagingFailed()
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
                                     maven.deletePublished params.stagingEnvironment, env.version
                                     git.deleteWorkBranch(params.gitSshKey)
