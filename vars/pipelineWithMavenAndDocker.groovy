@@ -85,7 +85,9 @@ def call(body) {
                 }
             }
             stage('Wait for verification to start') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    environment name: 'verification', value: 'true'
+                }
                 steps {
                     script {
                         jira.readyForCodeReview()
@@ -97,7 +99,10 @@ def call(body) {
                 }
             }
             stage('Wait for verification slot') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -125,7 +130,10 @@ def call(body) {
                 }
             }
             stage('Prepare verification') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                }
                 environment {
                     crucible = credentials('crucible')
                 }
@@ -155,7 +163,11 @@ def call(body) {
                 }
             }
             stage('Verification deliver (Java)') {
-                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.verificationEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -188,7 +200,11 @@ def call(body) {
                 }
             }
             stage('Verification deliver (Docker)') {
-                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.verificationEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -220,7 +236,11 @@ def call(body) {
                 }
             }
             stage('Verification deploy') {
-                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.verificationEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -255,7 +275,11 @@ def call(body) {
                 }
             }
             stage('Verification tests') {
-                when { expression { env.verification == 'true' && params.verificationEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.verificationEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -297,15 +321,21 @@ def call(body) {
                 }
             }
             stage('Wait for code review to finish') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    environment name: 'verification', value: 'true'
+                }
                 steps {
                     script {
                         jira.waitUntilCodeReviewIsFinished()
                     }
                 }
             }
-            stage('Staging deliver (Java)') {
-                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
+            stage('Staging deliver') {
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.stagingEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -339,7 +369,11 @@ def call(body) {
                 }
             }
             stage('Staging deliver (Docker)') {
-                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.stagingEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -373,7 +407,10 @@ def call(body) {
                 }
             }
             stage('Integrate code') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -415,7 +452,11 @@ def call(body) {
                 options {
                     lock resource: stagingLock
                 }
-                when { expression { env.verification == 'true' && params.stagingEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.stagingEnvironment != null }
+                }
                 failFast true
                 parallel() {
                     stage('Deploy') {
@@ -473,7 +514,11 @@ def call(body) {
                 }
             }
             stage('Production deliver (Java)') {
-                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.productionEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -504,7 +549,11 @@ def call(body) {
                 }
             }
             stage('Production deliver (Docker)') {
-                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.productionEnvironment != null }
+                }
                 agent {
                     docker {
                         label 'slave'
@@ -540,7 +589,11 @@ def call(body) {
                 options {
                     lock resource: productionLock
                 }
-                when { expression { env.verification == 'true' && params.productionEnvironment != null } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                    expression { params.productionEnvironment != null }
+                }
                 failFast true
                 parallel() {
                     stage('Deploy') {
@@ -584,7 +637,10 @@ def call(body) {
                 }
             }
             stage('End') {
-                when { expression { env.verification == 'true' } }
+                when {
+                    beforeAgent true
+                    environment name: 'verification', value: 'true'
+                }
                 agent {
                     docker {
                         label 'slave'
