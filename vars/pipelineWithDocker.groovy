@@ -29,13 +29,18 @@ def call(body) {
         env.verification = 'false'
         env.startVerification = 'false'
         String commitMessage = git.readCommitMessage()
-        if (commitMessage.startsWith('ready!'))
+        if (commitMessage.startsWith('ready!')) {
             env.verification = 'true'
-        else {
+        } else if (commitMessage.startsWith('integrate!')) {
+            env.verification = 'true'
+            params.verificationEnvironment = null
+            params.stagingEnvironment = null
+            params.productionEnvironment = null
+        } else {
             stagingLock += '-no-lock'
             productionLock += '-no-lock'
         }
-        if (commitMessage.startsWith('ready!!'))
+        if (commitMessage.startsWith('ready!!') || commitMessage.startsWith('integrate!!'))
             env.startVerification = 'true'
     }
 
