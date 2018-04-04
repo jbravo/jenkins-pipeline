@@ -33,6 +33,7 @@ class Components {
         maven = new Maven()
         maven.environments = environments
         maven.docker = docker
+        maven.errorHandler = errorHandler
         puppet = new Puppet()
         puppet.environments = environments
     }

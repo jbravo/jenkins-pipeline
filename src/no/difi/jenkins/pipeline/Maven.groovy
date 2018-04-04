@@ -5,12 +5,22 @@ import groovy.text.SimpleTemplateEngine
 
 Docker docker
 Environments environments
+ErrorHandler errorHandler
 
 void verify(def options) {
     String settingsFile = settingsFile()
     env.MAVEN_OPTS = options ?: ""
-    sh "mvn clean verify -B -T 1C -s ${settingsFile}"
+    int status = sh returnStatus: true, script: """
+        mvn clean verify -B -T 1C -s ${settingsFile}
+    """
     sh "rm ${settingsFile}"
+    try {
+        junit '**/target/surefire-reports/TEST-*.xml'
+    } catch (e) {
+        echo "JUnit report was not created"
+    }
+    if (status != 0)
+        errorHandler.trigger "Maven build failed (exit code ${status})"
 }
 
 void deliver(

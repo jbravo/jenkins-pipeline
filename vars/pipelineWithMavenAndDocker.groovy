@@ -78,11 +78,6 @@ def call(body) {
                         maven.verify params.MAVEN_OPTS
                     }
                 }
-                post {
-                    always {
-                        junit '**/target/surefire-reports/TEST-*.xml'
-                    }
-                }
             }
             stage('Wait for verification to start') {
                 when {
