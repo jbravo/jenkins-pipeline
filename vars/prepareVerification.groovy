@@ -9,7 +9,7 @@ def call(String gitSshKey, String crucibleUrl, String crucibleProjectKey, String
     Git git = new Git()
     Jira jira = new Jira()
     env.version = DateTimeFormatter.ofPattern('yyyy-MM-dd-HHmm').format(now(ZoneId.of('UTC'))) + "-" + git.readCommitId()
-    String issueSummary = jira.issueSummary()
+    String issueSummary = jira.issueSummary().trim()
     String issueId = jira.issueId()
     String commitMessage = "${env.version}|${issueId}: ${issueSummary}".toString()
     echo "Generated commit message <${commitMessage}>"

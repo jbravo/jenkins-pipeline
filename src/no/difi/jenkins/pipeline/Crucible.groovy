@@ -12,9 +12,9 @@ void synchronize(String crucibleUrl, String repositoryName, String username, Str
         -fsS "${crucibleUrl}/rest-service-fecru/admin/repositories/${repositoryName}/incremental-index?wait=true" \
         -w '%{http_code}') ||
     {
-        [ "\${statusCode}" == "401" ] && { >&2 echo "Failed to perform incremental indexing. Incorrect credentials for ${crucibleUrl}"; return 1; }
-        [ "\${statusCode}" == "500" ] && { >&2 echo "Failed to perform incremental indexing. Is the repository called ${repositoryName} in Fisheye/Crucible?"; return 1; }
-        { >&2 echo "Failed to perform incremental indexing. HTTP response code is \${statusCode} and curl error code is \$?"; return  1; }
+        [ "\${statusCode}" == "401" ] && { >&2 echo "Failed to perform incremental indexing. Incorrect credentials for ${crucibleUrl}"; exit 1; }
+        [ "\${statusCode}" == "500" ] && { >&2 echo "Failed to perform incremental indexing. Is the repository called ${repositoryName} in Fisheye/Crucible?"; exit 1; }
+        { >&2 echo "Failed to perform incremental indexing. HTTP response code is \${statusCode} and curl error code is \$?"; exit 1; }
     }
     """
 }
@@ -30,9 +30,9 @@ void createReview(String commitId, String issueSummary, String issueId, String c
         -d '${request}' \
         -fsS '${crucibleUrl}/rest-service/reviews-v1') ||
     {
-        [ "\${statusCode}" == "401" ] && { >&2 echo "Incorrect credentials for ${crucibleUrl}"; return 1; }
-        [ "\${statusCode}" == "500" ] && { >&2 echo "Is the repository called ${crucibleRepository} and the project key ${crucibleProjectKey} in Fisheye/Crucible?"; return 1; }
-        { >&2 echo "Failed to create review. HTTP response code is \${statusCode} and curl error code is \$?"; return  1; }
+        [ "\${statusCode}" == "401" ] && { >&2 echo "Incorrect credentials for ${crucibleUrl}"; exit 1; }
+        [ "\${statusCode}" == "500" ] && { >&2 echo "Is the repository called ${crucibleRepository} and the project key ${crucibleProjectKey} in Fisheye/Crucible?"; exit 1; }
+        { >&2 echo "Failed to create review. HTTP response code is \${statusCode} and curl error code is \$?"; exit 1; }
     }
     """
 }
@@ -40,6 +40,7 @@ void createReview(String commitId, String issueSummary, String issueId, String c
 private String request(String commitId, String issueSummary, String issueId, String crucibleProjectKey, String crucibleRepository) {
     String requestTemplate = libraryResource 'crucibleRequest.json'
     String safeIssueSummary = issueSummary
+            .trim()
             .replaceAll("'", '"')
             .replaceAll('"', '\\\\"')
     Map binding = [
