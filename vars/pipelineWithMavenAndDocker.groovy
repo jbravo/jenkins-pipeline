@@ -501,8 +501,13 @@ def call(body) {
                             script {
                                 if (!jira.waitUntilManualVerificationIsStarted()) return
                                 if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
-                                if (!jira.fixVersions().contains(env.version))
+                                if (!jira.fixVersions().contains(env.version)) {
                                     env.verification = 'false'
+                                    node() {
+                                        checkout scm
+                                        git.deleteWorkBranch(params.gitSshKey)
+                                    }
+                                }
                             }
                         }
                     }
@@ -646,7 +651,7 @@ def call(body) {
                 steps {
                     script {
                         failIfJobIsAborted()
-                        jira.close()
+                        jira.close env.version, env.sourceCodeRepository
                         git.deleteWorkBranch(params.gitSshKey)
                     }
                 }

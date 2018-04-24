@@ -26,7 +26,6 @@ void verify(def options) {
 void deliver(
         def version, def mavenOptions, def parallel, def environmentId
 ) {
-    currentBuild.description = "Delivery: version ${version}, commit ${GIT_COMMIT}, environment ${environmentId}"
     if (environments.isDockerDeliverySupported(environmentId)) {
         deliverDockerAndJava(version, mavenOptions, parallel, environmentId)
     } else {

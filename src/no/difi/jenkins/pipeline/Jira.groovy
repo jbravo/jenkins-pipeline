@@ -2,6 +2,8 @@ package no.difi.jenkins.pipeline
 
 import org.jenkinsci.plugins.workflow.steps.FlowInterruptedException
 
+import static groovy.json.JsonOutput.toJson
+import static java.util.Collections.singletonList
 import static java.util.stream.Collectors.joining
 
 Map config
@@ -27,10 +29,13 @@ private void setField(def field, def value) {
 
 private List<String> issuesWithStatus(def status, def repository) {
     try {
+        echo "Searching for issues with status '${statusName status}'..."
         def response = jiraJqlSearch jql: "status = ${status} and cf[${config.fields.sourceCodeRepository}] ~ '${repository}'"
-        response.data.issues['key'] as List<String>
+        List<String> issues = response.data.issues['key'] as List<String>
+        echo "Following issues have status '${statusName status}': ${issues}"
+        return issues
     } catch (e) {
-        errorHandler.trigger "Failed to get list of issues with status ${status}: ${e}"
+        errorHandler.trigger "Failed to get list of issues with status '${statusName status}': ${e}"
     }
 }
 
@@ -108,6 +113,10 @@ Map issueFields(def issueId) {
     }
 }
 
+String issueStatus() {
+    issueStatus issueId()
+}
+
 String issueStatus(def issueId) {
     try {
         issueStatus issueFields(issueId)
@@ -140,7 +149,7 @@ String projectKey(String issueId) {
     try {
         projectKey issueFields(issueId)
     } catch (e) {
-        errorHandler.trigger "Failed to get issue summary: ${e.message}"
+        errorHandler.trigger "Failed to get project key: ${e.message}"
     }
 }
 
@@ -149,7 +158,7 @@ static String issueStatus(Map issueFields) {
 }
 
 static String issueSummary(Map issueFields) {
-    issueFields['summary']
+    issueFields['summary'] ?: ""
 }
 
 
@@ -194,16 +203,39 @@ void resumeWork() {
         errorHandler.trigger "Failed to change issue status to 'in progress'"
 }
 
-void close() {
-    changeIssueStatus config.statuses.codeApproved, config.transitions.closeWithoutStaging
-    changeIssueStatus config.statuses.manualVerificationOk, config.transitions.close
+void close(def version, def repository) {
+    if (issueStatusIs(config.statuses.codeApproved)) {
+        echo "Closing issue"
+        changeIssueStatus config.transitions.closeWithoutStaging
+    } else {
+        List<String> issues = issuesToClose version, repository
+        echo "Closing all issues with version ${version}: ${issues}"
+        issues.each { issue ->
+            echo "Closing issue ${issue}"
+            changeIssueStatus issue, config.transitions.close
+        }
+    }
+}
+
+private List<String> issuesToClose(def version, def repository) {
+    try {
+        echo 'Searching for issues to close...'
+        def response = jiraJqlSearch jql: "status = ${config.statuses.manualVerificationOk} and cf[${config.fields.sourceCodeRepository}] ~ '${repository}' and fixVersion = ${version}"
+        List<String> issues = response.data.issues['key'] as List<String>
+        echo "Following issues should be closed: ${issues}"
+        issues
+    } catch (e) {
+        errorHandler.trigger "Failed to get list of issues that should be closed: ${e}"
+    }
 }
 
 boolean waitUntilVerificationIsStarted() {
-    echo "Waiting for issue status to change to 'code review'..."
-    PollResponse pollResponse = pollUntilIssueStatusIs(config.statuses.codeReview)
+    echo "Waiting for issue status to change from 'ready for verification'..."
+    PollResponse pollResponse = pollUntilIssueStatusIsNot(config.statuses.readyForVerification)
     if (pollResponse == null) return false
-    waitForCallback(pollResponse)
+    if (!waitForCallback(pollResponse))
+        return false
+    assertIssueHasStatusIn([config.statuses.codeReview, config.statuses.codeApproved])
 }
 
 boolean waitUntilCodeReviewIsFinished() {
@@ -224,9 +256,22 @@ private boolean isCodeApproved() {
 
 boolean waitUntilManualVerificationIsStarted() {
     echo "Waiting for issue status to change to 'manual verification'..."
-    PollResponse pollResponse = pollUntilIssueStatusIs config.statuses.manualVerification
+    PollResponse pollResponse = pollUntilIssueStatusIsNot config.statuses.codeApproved
     if (pollResponse == null) return false
-    waitForCallback(pollResponse)
+    if (!waitForCallback(pollResponse))
+        return false
+    assertIssueHasStatusIn([config.statuses.manualVerification, config.statuses.manualVerificationOk, config.statuses.manualVerificationFailed])
+}
+
+private boolean assertIssueHasStatusIn(List statuses) {
+    int issueStatus = issueStatus() as Integer
+    if (issueStatus in statuses) {
+        return true
+    } else {
+        echo "Issue status is ${issueStatus}, which is not in ${statuses} - aborting"
+        env.jobAborted = 'true'
+        return false
+    }
 }
 
 boolean waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepository) {
@@ -234,9 +279,9 @@ boolean waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepo
     echo """Waiting for following issues to complete manual verification:
             ${issues.stream().sorted().collect(joining("\n"))}
     """
-    issues.each { issueId ->
-        echo "Waiting for issue status to change from 'manual verification' for ${issueId}..."
-        PollResponse pollResponse = pollUntilIssueStatusIsNot issueId, config.statuses.manualVerification
+    echo "Waiting for issue status to change from 'manual verification' for ${issues}..."
+    if (!issues.isEmpty()) {
+        PollResponse pollResponse = pollUntilIssueStatusIsNot issues, config.statuses.manualVerification
         if (pollResponse == null) return false
         if (!waitForCallback(pollResponse)) return false
     }
@@ -303,43 +348,73 @@ private void changeIssueStatus(def transitionId) {
 }
 
 private void changeIssueStatus(String issueId, def transitionId) {
+    def status = 'N/A'
     try {
+        status = issueStatus issueId
+        echo "Transition issue ${issueId} from status '${statusName status}' with transition '${transitionName transitionId}'"
         jiraTransitionIssue idOrKey: issueId, input: [transition: [id: transitionId]]
     } catch (e) {
-        errorHandler.trigger "Failed to move issue to '${transitionName transitionId}': ${e.message}"
+        errorHandler.trigger "Failed to transition issue ${issueId} from status '${statusName status}' with transition '${transitionName transitionId}': ${e.message}"
     }
 }
 
 private String transitionName(def transitionId) {
     switch (transitionId) {
-        case config.statuses.inProgress: return 'in progress'
-        case config.statuses.readyForCodeReview: return 'ready for code review'
+        case config.transitions.start: return 'start'
+        case config.transitions.readyForCodeReview: return 'ready for code review'
+        case config.transitions.startVerification: return 'start verification'
+        case config.transitions.cancelVerification: return 'cancel verification'
+        case config.transitions.resumeWork: return 'resume work'
+        case config.transitions.approveCode: return 'approve code'
+        case config.transitions.resumeWorkFromApprovedCode: return 'resume work from approved code'
+        case config.transitions.startManualVerification: return 'start manual verification'
+        case config.transitions.approveManualVerification: return 'approve manual verification'
+        case config.transitions.failManualVerification: return 'fail manual verification'
+        case config.transitions.failStagingDeploy: return 'fail staging deploy'
+        case config.transitions.retryManualVerificationFromSuccess: return 'retry manual verification from success'
+        case config.transitions.retryManualVerificationFromFailure: return 'retry manual verification from failure'
+        case config.transitions.closeWithoutStaging: return 'close without staging'
+        case config.transitions.close: return 'close'
         default: return "<transition ${transitionId}>"
+    }
+}
+
+private String statusName(def statusId) {
+    switch (statusId as Integer) {
+        case config.statuses.open: return 'open'
+        case config.statuses.inProgress: return 'in progress'
+        case config.statuses.readyForVerification: return 'ready for verification'
+        case config.statuses.codeApproved: return 'code approved'
+        case config.statuses.codeReview: return 'code review'
+        case config.statuses.manualVerification: return 'manual verification'
+        case config.statuses.manualVerificationOk: return 'manual verification ok'
+        case config.statuses.manualVerificationFailed: return 'manual verification failed'
+        default: return "<status ${statusId}>"
     }
 }
 
 private void changeIssueStatus(def sourceStatus, def transitionId) {
     if (issueStatusIs(sourceStatus)) {
-        echo "Transitioning issue from ${sourceStatus} with transition ${transitionId}"
         changeIssueStatus transitionId
     }
 }
 
 private PollResponse pollUntilIssueStatusIs(def targetStatus) {
+    List<String> issueIds = singletonList(issueId())
     String callbackId = callbackId()
     try {
         String pollId = httpRequest(
                 url: pollingAgentUrl(),
                 httpMode: 'POST',
                 contentType: 'APPLICATION_JSON_UTF8',
-                requestBody: """
-                {
-                    "jiraAddress": "${config.url}",
-                    "callbackAddress": "${callbackAddress(callbackId)}",
-                    "positiveTargetStatus": "${targetStatus}",
-                    "issue": "${issueId()}"
-                }
-                """
+                requestBody: toJson(
+                        [
+                                jiraAddress: config.url,
+                                callbackAddress: callbackAddress(callbackId),
+                                positiveTargetStatus: targetStatus,
+                                issues: issueIds
+                        ]
+                )
         ).content
         new PollResponse(pollId: pollId, callbackId: callbackId)
     } catch (e) {
@@ -350,24 +425,24 @@ private PollResponse pollUntilIssueStatusIs(def targetStatus) {
 }
 
 private PollResponse pollUntilIssueStatusIsNot(def targetStatus) {
-    pollUntilIssueStatusIsNot issueId(), targetStatus
+    pollUntilIssueStatusIsNot singletonList(issueId()), targetStatus
 }
 
-private PollResponse pollUntilIssueStatusIsNot(def issueId, def targetStatus) {
+private PollResponse pollUntilIssueStatusIsNot(List<String> issueIds, def targetStatus) {
     String callbackId = callbackId()
     try {
         String pollId = httpRequest(
                 url: pollingAgentUrl(),
                 httpMode: 'POST',
                 contentType: 'APPLICATION_JSON_UTF8',
-                requestBody: """
-                {
-                    "jiraAddress": "${config.url}",
-                    "callbackAddress": "${callbackAddress(callbackId)}",
-                    "negativeTargetStatus": "${targetStatus}",
-                    "issue": "${issueId}"
-                }
-                """
+                requestBody: toJson(
+                        [
+                                jiraAddress: config.url,
+                                callbackAddress: callbackAddress(callbackId),
+                                negativeTargetStatus: targetStatus,
+                                issues: issueIds
+                        ]
+                )
         ).content
         new PollResponse(pollId: pollId, callbackId: callbackId)
     } catch (e) {
