@@ -2,9 +2,11 @@ import no.difi.jenkins.pipeline.Components
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
+import no.difi.jenkins.pipeline.stages.CheckBuild
 
 def call(body) {
     Components components = new Components()
+    CheckBuild checkBuild = components.checkBuild
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
@@ -62,11 +64,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        currentBuild.description = "Building from commit " + git.readCommitId()
-                        env.sourceCodeRepository = env.GIT_URL
-                        jira.setSourceCodeRepository env.sourceCodeRepository
-                        jira.startWork()
-                        dockerClient.verify()
+                        checkBuild.script(params)
                     }
                 }
             }

@@ -1,5 +1,7 @@
 package no.difi.jenkins.pipeline
 
+ErrorHandler errorHandler
+
 String readCommitId() {
     sh(returnStdout: true, script: 'git rev-parse HEAD').trim().take(7)
 }
@@ -111,5 +113,26 @@ void integrateCode(def sshKey) {
     checkoutVerificationBranch()
     sshagent([sshKey]) {
         sh 'git push origin HEAD:master'
+    }
+}
+
+boolean isIntegrated(String issueId, def sshKey) {
+    fetchMasterFromOrigin(sshKey)
+    int status = sh(returnStatus: true, script: """#!/usr/bin/env bash    
+        log=\$(git log --format=%B origin/master) || exit 2
+        echo \${log} | grep -qP "^(((.{15,}: )?(work)/)|.{15,}\\|)${issueId}:"
+    """)
+    switch (status) {
+        case 0: return true
+        case 1: return false
+        default: errorHandler.trigger "Failed to check if ${issueId} was already integrated"
+    }
+}
+
+private void fetchMasterFromOrigin(def sshKey) {
+    sshagent([sshKey]) {
+        int status = sh(returnStatus: true, script: 'git fetch origin master')
+        if (status != 0)
+            errorHandler.trigger "Failed to fetch master branch from origin"
     }
 }

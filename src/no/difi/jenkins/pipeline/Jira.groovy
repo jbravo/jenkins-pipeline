@@ -179,11 +179,28 @@ void startVerification() {
 }
 
 void startWork() {
-    changeIssueStatus config.statuses.open, config.transitions.start
-    changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
-    changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
+    String issueStatus = issueStatus()
+    switch (issueStatus) {
+        case config.statuses.inProgress as String:
+            break
+        case config.statuses.open as String:
+            changeIssueStatus config.transitions.start
+            break
+        case config.statuses.readyForVerification as String:
+            changeIssueStatus config.transitions.cancelVerification
+            break
+        case config.statuses.codeReview as String:
+            changeIssueStatus config.transitions.resumeWork
+            break
+        case config.statuses.codeApproved as String:
+            changeIssueStatus config.transitions.resumeWorkFromApprovedCode
+            break
+        default:
+            errorHandler.trigger "Can't set issue status to 'in progress'"
+            break
+    }
     if (!issueStatusIs(config.statuses.inProgress))
-        errorHandler.trigger "Failed to change issue status to 'in progress'"
+        errorHandler.trigger "Issue status is not 'in progress'"
 }
 
 void startManualVerification() {

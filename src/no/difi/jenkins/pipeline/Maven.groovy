@@ -7,6 +7,10 @@ Docker docker
 Environments environments
 ErrorHandler errorHandler
 
+boolean isMavenProject() {
+    0 == sh(returnStatus: true, script: "[ -e ${WORKSPACE}/pom.xml ]")
+}
+
 void verify(def options) {
     String settingsFile = settingsFile()
     env.MAVEN_OPTS = options ?: ""

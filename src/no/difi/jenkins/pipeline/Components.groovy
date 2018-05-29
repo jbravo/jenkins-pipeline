@@ -1,5 +1,6 @@
 package no.difi.jenkins.pipeline
 
+import no.difi.jenkins.pipeline.stages.CheckBuild
 @Grab('org.yaml:snakeyaml:1.19')
 import org.yaml.snakeyaml.Yaml
 
@@ -14,6 +15,7 @@ class Components {
     Jira jira
     Maven maven
     Puppet puppet
+    CheckBuild checkBuild
 
     Components() {
         File configFile = "/config.yaml" as File
@@ -27,6 +29,7 @@ class Components {
         docker.config = config.docker
         docker.environments = environments
         git = new Git()
+        git.errorHandler = errorHandler
         jira = new Jira()
         jira.config = config.jira
         jira.errorHandler = errorHandler
@@ -36,6 +39,12 @@ class Components {
         maven.errorHandler = errorHandler
         puppet = new Puppet()
         puppet.environments = environments
+        checkBuild = new CheckBuild()
+        checkBuild.errorHandler = errorHandler
+        checkBuild.git = git
+        checkBuild.jira = jira
+        checkBuild.dockerClient = docker
+        checkBuild.maven = maven
     }
 
 }

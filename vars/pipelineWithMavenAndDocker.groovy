@@ -5,9 +5,11 @@ import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.Puppet
 import no.difi.jenkins.pipeline.VerificationTestResult
+import no.difi.jenkins.pipeline.stages.CheckBuild
 
 def call(body) {
     Components components = new Components()
+    CheckBuild checkBuild = components.checkBuild
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
@@ -71,11 +73,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        currentBuild.description = "Building from commit " + git.readCommitId()
-                        env.sourceCodeRepository = env.GIT_URL
-                        jira.setSourceCodeRepository env.sourceCodeRepository
-                        jira.startWork()
-                        maven.verify params.MAVEN_OPTS
+                        checkBuild.script(params)
                     }
                 }
             }
