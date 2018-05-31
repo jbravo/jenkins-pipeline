@@ -5,11 +5,9 @@ import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.Puppet
 import no.difi.jenkins.pipeline.VerificationTestResult
-import no.difi.jenkins.pipeline.stages.CheckBuild
 
 def call(body) {
     Components components = new Components()
-    CheckBuild checkBuild = components.checkBuild
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
@@ -73,7 +71,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        checkBuild.script(params)
+                        components.checkBuild.script(params)
                     }
                 }
             }
@@ -83,11 +81,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        jira.readyForCodeReview()
-                        if (env.startVerification == 'true') {
-                            jira.startVerification()
-                        }
-                        jira.waitUntilVerificationIsStarted()
+                        components.waitForVerificationToStart.script()
                     }
                 }
             }
@@ -104,20 +98,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
-                    echo "Waiting for available verification slot..."
-                    waitForAvailableVerificationSlot(params.gitSshKey)
-                    failIfJobIsAborted()
+                    script {
+                        components.waitForVerificationSlot.script(params)
+                    }
                 }
                 post {
                     failure {
                         script {
-                            jira.resumeWork()
+                            components.waitForVerificationSlot.failureScript()
                         }
                     }
                     aborted {
                         script {
-                            jira.resumeWork()
+                            components.waitForVerificationSlot.abortedScript()
                         }
                     }
                 }
@@ -138,19 +131,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    prepareVerification params.gitSshKey, env.CRUCIBLE_URL, env.CRUCIBLE_PROJECT_KEY, env.crucible_USR, env.crucible_PSW
+                    script {
+                        components.prepareVerification.script(params)
+                    }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.prepareVerification.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.prepareVerification.abortedScript(params)
                         }
                     }
                 }

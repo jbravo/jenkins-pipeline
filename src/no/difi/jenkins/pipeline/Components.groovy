@@ -1,6 +1,9 @@
 package no.difi.jenkins.pipeline
 
 import no.difi.jenkins.pipeline.stages.CheckBuild
+import no.difi.jenkins.pipeline.stages.PrepareVerification
+import no.difi.jenkins.pipeline.stages.WaitForVerificationSlot
+import no.difi.jenkins.pipeline.stages.WaitForVerificationToStart
 @Grab('org.yaml:snakeyaml:1.19')
 import org.yaml.snakeyaml.Yaml
 
@@ -16,6 +19,9 @@ class Components {
     Maven maven
     Puppet puppet
     CheckBuild checkBuild
+    WaitForVerificationToStart waitForVerificationToStart
+    WaitForVerificationSlot waitForVerificationSlot
+    PrepareVerification prepareVerification
 
     Components() {
         File configFile = "/config.yaml" as File
@@ -45,6 +51,16 @@ class Components {
         checkBuild.jira = jira
         checkBuild.dockerClient = docker
         checkBuild.maven = maven
+        waitForVerificationToStart = new WaitForVerificationToStart()
+        waitForVerificationToStart.jira = jira
+        waitForVerificationSlot = new WaitForVerificationSlot()
+        waitForVerificationSlot.git = git
+        waitForVerificationSlot.jira = jira
+        waitForVerificationSlot.errorHandler = errorHandler
+        prepareVerification = new PrepareVerification()
+        prepareVerification.git = git
+        prepareVerification.jira = jira
+        prepareVerification.crucible = crucible
     }
 
 }

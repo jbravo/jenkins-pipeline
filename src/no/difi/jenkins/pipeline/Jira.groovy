@@ -248,18 +248,23 @@ private List<String> issuesToClose(def version, def repository) {
 
 boolean waitUntilVerificationIsStarted() {
     echo "Waiting for issue status to change from 'ready for verification'..."
-    PollResponse pollResponse = pollUntilIssueStatusIsNot(config.statuses.readyForVerification)
+    Poll pollResponse = pollUntilIssueStatusIsNot(config.statuses.readyForVerification)
     if (pollResponse == null) return false
     if (!waitForCallback(pollResponse))
         return false
-    assertIssueHasStatusIn([config.statuses.codeReview, config.statuses.codeApproved])
+    if (issueStatusIs(config.statuses.readyForVerification))
+        changeIssueStatus config.transitions.startVerification
+    assertIssueStatusIn([config.statuses.codeReview, config.statuses.codeApproved])
 }
 
 boolean waitUntilCodeReviewIsFinished() {
     echo "Waiting for issue status to change from 'code review'..."
-    PollResponse pollResponse = pollUntilIssueStatusIsNot config.statuses.codeReview
-    if (pollResponse == null) return false
-    waitForCallback(pollResponse)
+    Poll poll = pollUntilIssueStatusIsNot config.statuses.codeReview
+    if (poll == null) return false
+    if (!waitForCallback(poll))
+        return false
+    if (issueStatusIs(config.statuses.codeReview))
+        changeIssueStatus config.transitions.approveCode
 }
 
 void failIfCodeNotApproved() {
@@ -273,14 +278,14 @@ private boolean isCodeApproved() {
 
 boolean waitUntilManualVerificationIsStarted() {
     echo "Waiting for issue status to change to 'manual verification'..."
-    PollResponse pollResponse = pollUntilIssueStatusIsNot config.statuses.codeApproved
+    Poll pollResponse = pollUntilIssueStatusIsNot config.statuses.codeApproved
     if (pollResponse == null) return false
     if (!waitForCallback(pollResponse))
         return false
-    assertIssueHasStatusIn([config.statuses.manualVerification, config.statuses.manualVerificationOk, config.statuses.manualVerificationFailed])
+    assertIssueStatusIn([config.statuses.manualVerification, config.statuses.manualVerificationOk, config.statuses.manualVerificationFailed])
 }
 
-private boolean assertIssueHasStatusIn(List statuses) {
+private boolean assertIssueStatusIn(List statuses) {
     int issueStatus = issueStatus() as Integer
     if (issueStatus in statuses) {
         return true
@@ -296,40 +301,56 @@ boolean waitUntilManualVerificationIsFinishedAndAssertSuccess(def sourceCodeRepo
     echo """Waiting for following issues to complete manual verification:
             ${issues.stream().sorted().collect(joining("\n"))}
     """
+    return waitUntilManualVerificationIsFinished(issues)
+}
+
+private boolean waitUntilManualVerificationIsFinished(List<String> issues) {
     echo "Waiting for issue status to change from 'manual verification' for ${issues}..."
     if (!issues.isEmpty()) {
-        PollResponse pollResponse = pollUntilIssueStatusIsNot issues, config.statuses.manualVerification
+        Poll pollResponse = pollUntilIssueStatusIsNot issues, config.statuses.manualVerification
         if (pollResponse == null) return false
         if (!waitForCallback(pollResponse)) return false
     }
     List<String> failedIssues = new ArrayList<>()
+    List<String> notVerifiedIssues = new ArrayList<>()
     issues.each { issueId ->
         echo "Checking issue status for ${issueId}..."
         if (issueStatus(issueId) == config.statuses.manualVerificationFailed) {
             echo "Issue ${issueId} failed verification -- creating a bug issue"
             createBugForFailedVerification issueId
             failedIssues.add issueId
+        } else if (issueStatus(issueId) == config.statuses.manualVerificationFailed) {
+            // We are here because Proceed was selected in the input dialog before polling completed
+            echo "Issue ${issueId} is not yet verified -- creating a bug issue"
+            notVerifiedIssues.add issueId
         }
     }
     if (!failedIssues.isEmpty()) {
         echo "Following issues failed verification: ${failedIssues}"
-        false
-    } else {
-        echo "All issues were successfully verified: ${issues}"
-        true
+        return false
     }
+    if (!notVerifiedIssues.isEmpty()) {
+        echo "Following issues are not verified: ${notVerifiedIssues}"
+        return waitUntilManualVerificationIsFinished(notVerifiedIssues)
+    }
+    echo "All issues were successfully verified: ${issues}"
+    return true
 }
 
-private boolean waitForCallback(PollResponse pollResponse) {
+/**
+ * Waits synchronously for a callback for a given poll. Returns <code>true</code> if poll succeeded,
+ * otherwise <code>false</code>.
+ */
+private boolean waitForCallback(Poll poll) {
     try {
-        input message: 'Waiting for callback from polling-agent', id: pollResponse.callbackId()
+        input message: 'Waiting for callback from polling-agent', id: poll.callbackId()
         true
     } catch (FlowInterruptedException e) {
         echo "Waiting for callback was aborted"
         env.jobAborted = 'true'
         false
     } finally {
-        deletePollJob pollResponse.pollId()
+        deletePollJob poll.pollId()
     }
 }
 
@@ -416,7 +437,7 @@ private void changeIssueStatus(def sourceStatus, def transitionId) {
     }
 }
 
-private PollResponse pollUntilIssueStatusIs(def targetStatus) {
+private Poll pollUntilIssueStatusIs(def targetStatus) {
     List<String> issueIds = singletonList(issueId())
     String callbackId = callbackId()
     try {
@@ -433,7 +454,7 @@ private PollResponse pollUntilIssueStatusIs(def targetStatus) {
                         ]
                 )
         ).content
-        new PollResponse(pollId: pollId, callbackId: callbackId)
+        new Poll(pollId: pollId, callbackId: callbackId)
     } catch (e) {
         echo "Initiating polling failed: ${e}"
         env.jobAborted = 'true'
@@ -441,11 +462,11 @@ private PollResponse pollUntilIssueStatusIs(def targetStatus) {
     }
 }
 
-private PollResponse pollUntilIssueStatusIsNot(def targetStatus) {
+private Poll pollUntilIssueStatusIsNot(def targetStatus) {
     pollUntilIssueStatusIsNot singletonList(issueId()), targetStatus
 }
 
-private PollResponse pollUntilIssueStatusIsNot(List<String> issueIds, def targetStatus) {
+private Poll pollUntilIssueStatusIsNot(List<String> issueIds, def targetStatus) {
     String callbackId = callbackId()
     try {
         String pollId = httpRequest(
@@ -461,7 +482,7 @@ private PollResponse pollUntilIssueStatusIsNot(List<String> issueIds, def target
                         ]
                 )
         ).content
-        new PollResponse(pollId: pollId, callbackId: callbackId)
+        new Poll(pollId: pollId, callbackId: callbackId)
     } catch (e) {
         echo "Initiating polling failed: ${e}"
         env.jobAborted = 'true'

@@ -1,6 +1,6 @@
 package no.difi.jenkins.pipeline
 
-class PollResponse {
+class Poll {
 
     private String pollId
     private String callbackId
