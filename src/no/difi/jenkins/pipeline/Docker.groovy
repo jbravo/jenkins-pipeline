@@ -35,7 +35,8 @@ String deployStack(def environmentId, def stackName, def version) {
         rc=1
         docker stack deploy -c docker/stack.yml ${stackName} || exit 1
         for i in \$(seq 1 100); do
-            docker stack services ${stackName} --format '{{.Name}}:{{.Replicas}}' | grep -vE ':([0-9]+)/\\1' || { rc=0; break; }
+            output=\$(docker stack services ${stackName} --format '{{.Name}}:{{.Replicas}}') || { rc=1; break; }
+            echo \${output} | grep -vE ':([0-9]+)/\\1' || { rc=0; break; }
             sleep 5
         done
         rm ${dockerHostFile}
