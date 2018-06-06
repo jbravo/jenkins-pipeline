@@ -28,10 +28,16 @@ void script(def params) {
 }
 
 void failureScript(def params) {
-    git.deleteVerificationBranch(params.gitSshKey)
-    jira.resumeWork()
+    cleanup(params)
+    jira.addFailureComment()
 }
 
 void abortedScript(def params) {
-    failureScript(params)
+    cleanup(params)
+    jira.addAbortedComment()
+}
+
+private void cleanup(def params) {
+    git.deleteVerificationBranch(params.gitSshKey)
+    jira.resumeWork()
 }

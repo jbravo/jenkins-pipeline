@@ -213,11 +213,23 @@ void stagingFailed() {
 }
 
 void resumeWork() {
-    changeIssueStatus config.statuses.readyForVerification, config.transitions.cancelVerification
-    changeIssueStatus config.statuses.codeReview, config.transitions.resumeWork
-    changeIssueStatus config.statuses.codeApproved, config.transitions.resumeWorkFromApprovedCode
-    if (!issueStatusIs(config.statuses.inProgress))
-        errorHandler.trigger "Failed to change issue status to 'in progress'"
+    echo "Changing issue status to 'in progress'"
+    String issueStatus = issueStatus()
+    switch (issueStatus) {
+        case config.statuses.readyForVerification as String:
+            config.transitions.cancelVerification
+            break
+        case config.statuses.codeReview as String:
+            changeIssueStatus config.transitions.resumeWork
+            break
+        case config.statuses.codeApproved as String:
+            changeIssueStatus config.transitions.resumeWorkFromApprovedCode
+            break
+        default:
+            echo "Can't set issue status to 'in progress'"
+            break
+    }
+    echo "Issue status changed to 'in progress'"
 }
 
 void close(def version, def repository) {
@@ -504,6 +516,23 @@ private String internalBuildUrl() {
 
 private static String pollingAgentUrl() {
     'http://polling-agent/jiraStatusPolls'
+}
+
+void addFailureComment() {
+    if (env.jobAborted == 'true') {
+        addAbortedComment()
+        return
+    }
+    echo "Adding failure comment to Jira issue"
+    if (env.errorMessage != null)
+        addComment("[Build ${env.BUILD_NUMBER}|${env.BUILD_URL}] failed in stage '${STAGE_NAME}': ${env.errorMessage}")
+    else
+        addComment("[Build ${env.BUILD_NUMBER}|${env.BUILD_URL}] failed in stage '${STAGE_NAME}'")
+}
+
+void addAbortedComment() {
+    echo "Adding aborted comment to Jira issue"
+    addComment("[Build ${env.BUILD_NUMBER}|${env.BUILD_URL}] was aborted in '${STAGE_NAME}'")
 }
 
 void addComment(String comment) {

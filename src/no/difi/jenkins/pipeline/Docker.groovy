@@ -110,17 +110,19 @@ void buildAndPublish(def environmentId, def version) {
 }
 
 void deletePublished(def environmentId, def version) {
+    echo "Deleting published Docker images for environment ${environmentId} with version ${version}..."
     def credentialsId = environments.dockerRegistryCredentialsId(environmentId)
     if (credentialsId == null) {
         echo "No Docker registry credentials configured for environment '${environmentId} -- will not attempt to delete published images"
         return
     }
+    echo "Using credentials '${credentialsId}'"
     String registryApiUrl = environments.dockerRegistryApiUrl(environmentId)
     if (registryApiUrl == null) {
         echo "No Docker registry API URL configured for environment '${environmentId} -- will not attempt to delete published images"
         return
     }
-    echo "Deleting published Docker images with version ${version}..."
+    echo "Using registry API URL '${registryApiUrl}'"
     withCredentials([usernamePassword(
             credentialsId: credentialsId,
             passwordVariable: 'registryPassword',

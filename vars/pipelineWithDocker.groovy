@@ -154,23 +154,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.verificationEnvironment, env.version
+                        components.verificationDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            jira.resumeWork()
+                            components.verificationDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            jira.resumeWork()
+                            components.verificationDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -190,26 +185,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        env.stackName = dockerClient.uniqueStackName()
-                        dockerClient.deployStack params.verificationEnvironment, env.stackName, env.version
+                        components.verificationDeploy.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            dockerClient.removeStack params.verificationEnvironment, env.stackName
-                            jira.resumeWork()
+                            components.verificationDeploy.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            dockerClient.removeStack params.verificationEnvironment, env.stackName
-                            jira.resumeWork()
+                            components.verificationDeploy.abortedScript(params)
                         }
                     }
                 }
@@ -257,26 +244,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        jira.failIfCodeNotApproved()
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
+                        components.stagingDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.stagingDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.stagingDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -294,29 +274,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        jira.failIfCodeNotApproved()
-                        jira.createAndSetFixVersion env.version
-                        git.integrateCode params.gitSshKey
+                        components.integrateCode.script(params)
                     }
                 }
                 post {
-                    always {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                        }
-                    }
                     failure {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.integrateCode.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.integrateCode.abortedScript(params)
                         }
                     }
                 }

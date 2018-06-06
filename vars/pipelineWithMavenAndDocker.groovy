@@ -163,8 +163,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.verificationEnvironment)
+                        components.verificationDeliverJava.script(params)
                     }
                 }
                 post {
@@ -173,14 +172,12 @@ def call(body) {
                     }
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.verificationDeliverJava.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.verificationDeliverJava.abortedScript(params)
                         }
                     }
                 }
@@ -200,23 +197,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.verificationEnvironment, env.version
+                        components.verificationDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            jira.resumeWork()
+                            components.verificationDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            jira.resumeWork()
+                            components.verificationDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -236,26 +228,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        env.stackName = dockerClient.uniqueStackName()
-                        dockerClient.deployStack params.verificationEnvironment, env.stackName, env.version
+                        components.verificationDeploy.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            dockerClient.removeStack params.verificationEnvironment, env.stackName
-                            jira.resumeWork()
+                            components.verificationDeploy.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.verificationEnvironment, env.version
-                            dockerClient.removeStack params.verificationEnvironment, env.stackName
-                            jira.resumeWork()
+                            components.verificationDeploy.abortedScript(params)
                         }
                     }
                 }
@@ -275,15 +259,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        if (maven.verificationTestsSupported(params.verificationEnvironment)) {
-                            VerificationTestResult result = maven.runVerificationTests params.verificationEnvironment, env.stackName
-                            jira.addComment(
-                                    "Verifikasjonstester utført: [Rapport|${result.reportUrl()}] og [byggstatus|${env.BUILD_URL}]",
-                            )
-                            if (!result.success())
-                                error 'Verification tests failed'
-                        }
+                        components.verificationTests.script(params)
                     }
                 }
                 post {
@@ -294,14 +270,12 @@ def call(body) {
                     }
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.verificationTests.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            jira.resumeWork()
+                            components.verificationTests.abortedScript(params)
                         }
                     }
                 }
@@ -330,26 +304,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        jira.failIfCodeNotApproved()
-                        git.checkoutVerificationBranch()
-                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.stagingEnvironment)
+                        components.stagingDeliverJava.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.stagingDeliverJava.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.stagingDeliverJava.abortedScript(params)
                         }
                     }
                 }
@@ -369,25 +336,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.stagingEnvironment, env.version
+                        components.stagingDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.stagingDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.stagingDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -405,31 +365,19 @@ def call(body) {
                     }
                 }
                 steps {
-                    failIfJobIsAborted()
                     script {
-                        jira.failIfCodeNotApproved()
-                        jira.createAndSetFixVersion env.version
-                        git.integrateCode params.gitSshKey
+                        components.integrateCode.script(params)
                     }
                 }
                 post {
-                    always {
-                        script {
-                            git.deleteVerificationBranch(params.gitSshKey)
-                        }
-                    }
                     failure {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.integrateCode.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished params.stagingEnvironment, env.version
-                            maven.deletePublished params.stagingEnvironment, env.version
-                            jira.resumeWork()
+                            components.integrateCode.abortedScript(params)
                         }
                     }
                 }

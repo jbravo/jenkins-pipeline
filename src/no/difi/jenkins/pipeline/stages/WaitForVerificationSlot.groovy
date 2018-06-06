@@ -23,11 +23,17 @@ void script(def params) {
 }
 
 void failureScript() {
-    jira.resumeWork()
+    cleanup()
+    jira.addFailureComment()
 }
 
 void abortedScript() {
-    failureScript()
+    cleanup()
+    jira.addAbortedComment()
+}
+
+private void cleanup() {
+    jira.resumeWork()
 }
 
 private void failIfJobIsAborted() {
