@@ -15,7 +15,7 @@ void script(def params) {
     echo "Waiting for available verification slot..."
     env.jobAborted = 'false'
     try {
-        git.waitForAvailableVerificationSlot(params.gitSshKey)
+        git.waitForAvailableVerificationSlot()
     } catch (FlowInterruptedException ignored) {
         env.jobAborted = "true"
     }

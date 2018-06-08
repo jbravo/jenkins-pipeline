@@ -13,7 +13,7 @@ Docker dockerClient
 Maven maven
 
 void script(def params) {
-    if (git.isIntegrated(jira.issueId(), params.gitSshKey))
+    if (git.isIntegrated(jira.issueId()))
         errorHandler.trigger "Code is already integrated"
     currentBuild.description = "Building from commit " + git.readCommitId()
     env.sourceCodeRepository = env.GIT_URL

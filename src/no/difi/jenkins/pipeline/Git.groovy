@@ -1,6 +1,7 @@
 package no.difi.jenkins.pipeline
 
 ErrorHandler errorHandler
+def sshKey
 
 String readCommitId() {
     sh(returnStdout: true, script: 'git rev-parse HEAD').trim().take(7)
@@ -15,13 +16,13 @@ String repositoryName() {
     repositoryUrl.tokenize(':/')[-1].tokenize('.')[0].trim()
 }
 
-void waitForAvailableVerificationSlot(def sshKey) {
+void waitForAvailableVerificationSlot() {
     sshagent([sshKey]) {
         while (true) {
-            def currentBranchUnderVerification = currentBranchUnderVerification(sshKey)
+            def currentBranchUnderVerification = currentBranchUnderVerification()
             if (currentBranchUnderVerification == env.BRANCH_NAME) {
                 echo "Verification branch from previous build was not deleted. Fixing..."
-                deleteVerificationBranch(sshKey)
+                deleteVerificationBranch()
             } else if (currentBranchUnderVerification != null) {
                 echo "Branch ${currentBranchUnderVerification} is using the verification slot. Waiting 10 seconds..."
                 sleep 10
@@ -33,7 +34,7 @@ void waitForAvailableVerificationSlot(def sshKey) {
     }
 }
 
-void createVerificationBranch(String logEntry, String sshKey) {
+void createVerificationBranch(String logEntry) {
     logEntry = logEntry.replaceAll('"', '\\\\"')
     sshagent([sshKey]) {
         return sh(returnStdout: true, script: """#!/usr/bin/env bash
@@ -75,7 +76,7 @@ void createVerificationBranch(String logEntry, String sshKey) {
     }
 }
 
-private String currentBranchUnderVerification(def sshKey) {
+private String currentBranchUnderVerification() {
     def output = sh returnStdout: true, script: "git ls-remote --heads origin verify/\\*"
     if (output.trim().isEmpty()) return null
     (output =~ /[0-9a-z]+\s+refs\/heads\/verify\/(.*)/)[0][1]
@@ -93,7 +94,7 @@ void resetVerificationBranchToOrigin() {
     sh "git checkout ${verificationBranch()} && git reset --hard origin/${verificationBranch()} && git checkout -"
 }
 
-void deleteVerificationBranch(def sshKey) {
+void deleteVerificationBranch() {
     echo "Deleting verification branch"
     sshagent([sshKey]) {
         int status = sh returnStatus: true, script: "git push origin --delete ${verificationBranch()}"
@@ -103,12 +104,12 @@ void deleteVerificationBranch(def sshKey) {
     }
 }
 
-void deleteWorkBranch(def sshKey) {
+void deleteWorkBranch() {
     echo "Deleting work branch"
     sshagent([sshKey]) { sh "git push origin --delete \${BRANCH_NAME}" }
 }
 
-void integrateCode(def sshKey) {
+void integrateCode() {
     echo "Integrating code"
     checkoutVerificationBranch()
     sshagent([sshKey]) {
@@ -116,8 +117,8 @@ void integrateCode(def sshKey) {
     }
 }
 
-boolean isIntegrated(String issueId, def sshKey) {
-    fetchMasterFromOrigin(sshKey)
+boolean isIntegrated(String issueId) {
+    fetchMasterFromOrigin()
     int status = sh(returnStatus: true, script: """#!/usr/bin/env bash    
         log=\$(git log --format=%B origin/master) || exit 2
         echo \${log} | grep -qP "^(((.{15,}: )?(work)/)|.{15,}\\|)${issueId}:"
@@ -129,7 +130,7 @@ boolean isIntegrated(String issueId, def sshKey) {
     }
 }
 
-private void fetchMasterFromOrigin(def sshKey) {
+private void fetchMasterFromOrigin() {
     sshagent([sshKey]) {
         int status = sh(returnStatus: true, script: 'git fetch origin master')
         if (status != 0)

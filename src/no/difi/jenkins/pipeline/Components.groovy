@@ -37,9 +37,11 @@ class Components {
     StagingDeliverDocker stagingDeliverDocker
     IntegrateCode integrateCode
 
-    Components() {
+    Components(def jobName) {
         File configFile = "/config.yaml" as File
         Map config = new Yaml().load(configFile.text)
+        File jobsFile = "/jobs.yaml" as File
+        Map jobs = new Yaml().load(jobsFile.text).jobs
         errorHandler = new ErrorHandler()
         environments = new Environments()
         environments.config = config
@@ -50,6 +52,7 @@ class Components {
         docker.environments = environments
         git = new Git()
         git.errorHandler = errorHandler
+        git.sshKey = jobs[jobName].sshKey
         jira = new Jira()
         jira.config = config.jira
         jira.errorHandler = errorHandler

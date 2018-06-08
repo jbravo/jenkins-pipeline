@@ -27,7 +27,7 @@ void abortedScript(def params) {
 }
 
 private void cleanup(def params) {
-    git.deleteVerificationBranch(params.gitSshKey)
+    git.deleteVerificationBranch()
     dockerClient.deletePublished params.verificationEnvironment, env.version
     if (maven.isMavenProject())
         maven.deletePublished params.verificationEnvironment, env.version

@@ -19,7 +19,7 @@ void script(def params) {
     String issueId = jira.issueId()
     String commitMessage = "${env.version}|${issueId}: ${issueSummary}".toString()
     echo "Generated commit message <${commitMessage}>"
-    String commitId = git.createVerificationBranch commitMessage, params.gitSshKey
+    String commitId = git.createVerificationBranch commitMessage
     currentBuild.description = "{\"version\":\"${env.version}\",\"commit\":\"${commitId.take(7)}\",\"issue\":\"${issueId}\"}"
     git.resetVerificationBranchToOrigin() // In case there was an existing local branch from previous build
     String repositoryName = git.repositoryName()
@@ -38,6 +38,6 @@ void abortedScript(def params) {
 }
 
 private void cleanup(def params) {
-    git.deleteVerificationBranch(params.gitSshKey)
+    git.deleteVerificationBranch()
     jira.resumeWork()
 }

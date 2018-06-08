@@ -4,16 +4,15 @@ import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.Puppet
-import no.difi.jenkins.pipeline.VerificationTestResult
 
 def call(body) {
-    Components components = new Components()
+    String projectName = JOB_NAME.tokenize('/')[0]
+    Components components = new Components(projectName)
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
     Maven maven = components.maven
     Puppet puppet = components.puppet
-    String projectName = JOB_NAME.tokenize('/')[0]
     String stagingLock = projectName + '-staging'
     String productionLock = projectName + '-production'
     String agentImage = 'difi/jenkins-agent'
@@ -366,7 +365,7 @@ def call(body) {
                 }
                 steps {
                     script {
-                        components.integrateCode.script(params)
+                        components.integrateCode.script()
                     }
                 }
                 post {
@@ -422,7 +421,7 @@ def call(body) {
                                     jira.stagingFailed()
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
                                     maven.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch(params.gitSshKey)
+                                    git.deleteWorkBranch()
                                 }
                             }
                             aborted {
@@ -430,7 +429,7 @@ def call(body) {
                                     jira.stagingFailed()
                                     dockerClient.deletePublished params.stagingEnvironment, env.version
                                     maven.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch(params.gitSshKey)
+                                    git.deleteWorkBranch()
                                 }
                             }
                         }
@@ -444,7 +443,7 @@ def call(body) {
                                     env.verification = 'false'
                                     node() {
                                         checkout scm
-                                        git.deleteWorkBranch(params.gitSshKey)
+                                        git.deleteWorkBranch()
                                     }
                                 }
                             }
@@ -476,13 +475,13 @@ def call(body) {
                     failure {
                         script {
                             maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteWorkBranch()
                         }
                     }
                     aborted {
                         script {
                             maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteWorkBranch()
                         }
                     }
                 }
@@ -512,14 +511,14 @@ def call(body) {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
                             maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteWorkBranch()
                         }
                     }
                     aborted {
                         script {
                             dockerClient.deletePublished params.productionEnvironment, env.version
                             maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch(params.gitSshKey)
+                            git.deleteWorkBranch()
                         }
                     }
                 }
@@ -561,14 +560,14 @@ def call(body) {
                                 script {
                                     dockerClient.deletePublished params.productionEnvironment, env.version
                                     maven.deletePublished params.productionEnvironment, env.version
-                                    git.deleteWorkBranch(params.gitSshKey)
+                                    git.deleteWorkBranch()
                                 }
                             }
                             aborted {
                                 script {
                                     dockerClient.deletePublished params.productionEnvironment, env.version
                                     maven.deletePublished params.productionEnvironment, env.version
-                                    git.deleteWorkBranch(params.gitSshKey)
+                                    git.deleteWorkBranch()
                                 }
                             }
                         }
@@ -591,7 +590,7 @@ def call(body) {
                     script {
                         failIfJobIsAborted()
                         jira.close env.version, env.sourceCodeRepository
-                        git.deleteWorkBranch(params.gitSshKey)
+                        git.deleteWorkBranch()
                     }
                 }
             }

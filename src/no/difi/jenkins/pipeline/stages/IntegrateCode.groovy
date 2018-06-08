@@ -12,12 +12,12 @@ Docker dockerClient
 Maven maven
 ErrorHandler errorHandler
 
-void script(def params) {
+void script() {
     failIfJobIsAborted()
     jira.failIfCodeNotApproved()
     jira.createAndSetFixVersion env.version
-    git.integrateCode params.gitSshKey
-    git.deleteVerificationBranch(params.gitSshKey)
+    git.integrateCode()
+    git.deleteVerificationBranch()
 }
 
 void failureScript(def params) {
@@ -31,7 +31,7 @@ void abortedScript(def params) {
 }
 
 private void cleanup(def params) {
-    git.deleteVerificationBranch(params.gitSshKey)
+    git.deleteVerificationBranch()
     if (params.stagingEnvironment != null) {
         dockerClient.deletePublished params.stagingEnvironment, env.version
         if (maven.isMavenProject())
