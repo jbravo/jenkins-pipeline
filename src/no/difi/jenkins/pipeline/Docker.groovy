@@ -38,11 +38,11 @@ String deployStack(def environmentId, def stackName, def version) {
             sleep 5
             output=\$(docker stack services ${stackName} --format '{{.Name}}:{{.Replicas}}') || { rc=1; >&2 echo "Failed to list services' replica counts: \${output}"; break; }
             [[ -z \${output} ]] && { echo "No services are listed yet"; continue; }
-            echo \${output} | grep -vE ':([0-9]+)/\\1' || { rc=0; echo "All services are up"; break; }
+            echo \${output} | grep -vE ':([0-9]+)/\\1' || { rc=0; echo "All services are up: \${output}"; break; }
             echo "All services are not yet up..."
         done
         rm ${dockerHostFile}
-        echo "Exiting with status \${rc}
+        echo "Exiting with status \${rc}"
         exit \${rc}
         """
         if (fileExists("${WORKSPACE}/docker/run-advice")) {
