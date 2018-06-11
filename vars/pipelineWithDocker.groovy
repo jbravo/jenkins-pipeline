@@ -341,7 +341,7 @@ def call(body) {
                     stage('Wait for approval') {
                         steps {
                             script {
-                                if (!jira.waitUntilManualVerificationIsStarted()) return // Not needen when lock on sequential stages is supported
+                                if (!jira.waitUntilManualVerificationIsStarted()) return // Not needed when lock on sequential stages is supported
                                 if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
                                 if (!jira.fixVersions().contains(env.version)) {
                                     env.verification = 'false'
@@ -456,23 +456,29 @@ def call(body) {
         }
         post {
             success {
-                echo "Success"
-                notifySuccess()
+                script {
+                    components.pipeline.successScript()
+                }
             }
             unstable {
-                echo "Unstable"
-                notifyUnstable()
+                script {
+                    components.pipeline.unstableScript()
+                }
             }
             failure {
-                echo "Failure"
-                notifyFailed()
+                script {
+                    components.pipeline.failureScript()
+                }
             }
             aborted {
-                echo "Aborted"
-                notifyFailed()
+                script {
+                    components.pipeline.abortedScript()
+                }
             }
             always {
-                echo "Build finished"
+                script {
+                    components.pipeline.alwaysScript()
+                }
             }
         }
     }
@@ -480,39 +486,3 @@ def call(body) {
 }
 
 
-def notifyFailed() {
-    emailext (
-            subject: "FAILED: '${env.JOB_NAME}'",
-            body: """<p>FAILED: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' feilet.</p>
-            <p><b>Konsoll output:</b><br/>
-            <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
-            recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-    )
-}
-
-def notifyUnstable() {
-    emailext (
-            subject: "UNSTABLE: '${env.JOB_NAME}'",
-            body: """<p>UNSTABLE: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' er ustabilt.</p>
-            <p><b>Konsoll output:</b><br/>
-            <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
-            recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-    )
-}
-
-def notifySuccess() {
-    if (isPreviousBuildFailOrUnstable()) {
-        emailext (
-                subject: "SUCCESS: '${env.JOB_NAME}'",
-                body: """<p>SUCCESS: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' er oppe og snurrer igjen.</p>""",
-                recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-        )
-    }
-}
-
-boolean isPreviousBuildFailOrUnstable() {
-    if(!hudson.model.Result.SUCCESS.equals(currentBuild.rawBuild.getPreviousBuild()?.getResult())) {
-        return true
-    }
-    return false
-}

@@ -16,6 +16,7 @@ import org.yaml.snakeyaml.Yaml
 
 class Components {
 
+    Pipeline pipeline
     ErrorHandler errorHandler
     Environments environments
     AWS aws
@@ -42,6 +43,7 @@ class Components {
         Map config = new Yaml().load(configFile.text)
         File jobsFile = "/jobs.yaml" as File
         Map jobs = new Yaml().load(jobsFile.text).jobs
+        pipeline = new Pipeline()
         errorHandler = new ErrorHandler()
         environments = new Environments()
         environments.config = config

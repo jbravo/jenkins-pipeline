@@ -597,63 +597,31 @@ def call(body) {
         }
         post {
             success {
-                echo "Success"
-                notifySuccess()
+                script {
+                    components.pipeline.successScript()
+                }
             }
             unstable {
-                echo "Unstable"
-                notifyUnstable()
+                script {
+                    components.pipeline.unstableScript()
+                }
             }
             failure {
-                echo "Failure"
-                notifyFailed()
+                script {
+                    components.pipeline.failureScript()
+                }
             }
             aborted {
-                echo "Aborted"
-                notifyFailed()
+                script {
+                    components.pipeline.abortedScript()
+                }
             }
             always {
-                echo "Build finished"
+                script {
+                    components.pipeline.alwaysScript()
+                }
             }
         }
     }
 
-}
-
-
-def notifyFailed() {
-    emailext (
-            subject: "FAILED: '${env.JOB_NAME}'",
-            body: """<p>FAILED: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' feilet.</p>
-            <p><b>Konsoll output:</b><br/>
-            <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
-            recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-    )
-}
-
-def notifyUnstable() {
-    emailext (
-            subject: "UNSTABLE: '${env.JOB_NAME}'",
-            body: """<p>UNSTABLE: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' er ustabilt.</p>
-            <p><b>Konsoll output:</b><br/>
-            <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
-            recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-    )
-}
-
-def notifySuccess() {
-    if (isPreviousBuildFailOrUnstable()) {
-        emailext (
-                subject: "SUCCESS: '${env.JOB_NAME}'",
-                body: """<p>SUCCESS: Bygg '${env.JOB_NAME} [${env.BUILD_NUMBER}]' er oppe og snurrer igjen.</p>""",
-                recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']]
-        )
-    }
-}
-
-boolean isPreviousBuildFailOrUnstable() {
-    if(!hudson.model.Result.SUCCESS.equals(currentBuild.rawBuild.getPreviousBuild()?.getResult())) {
-        return true
-    }
-    return false
 }
