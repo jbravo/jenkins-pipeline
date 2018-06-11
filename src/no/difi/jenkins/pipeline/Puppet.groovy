@@ -37,6 +37,8 @@ private void updateHiera(version, modules) {
     sh """#!/usr/bin/env bash
     
     updateVersions() {
+        local gitUserName=\$(git config --get user.name)
+        local gitEmail=\$(git config --get user.email)
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
         local platformFile=nodes/systest/platform.yaml
         git clone --branch=master git@eid-gitlab.dmz.local:puppet/puppet_hiera.git \${workDirectory}
@@ -45,8 +47,8 @@ private void updateHiera(version, modules) {
             sed -i "s/\\(\${module}::component_version:\\s\\).*/\\1\\"${version}\\"/i" \${platformFile}
         done
         git add \${platformFile}
-        git config --local user.name 'Jenkins'
-        git config --local user.email 'jenkins@difi.no'
+        git config --local user.name "\${gitUserName}"
+        git config --local user.email "\${gitEmail}"
         git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version}" \${platformFile}
         git push
         cd -
@@ -63,6 +65,8 @@ private void updateControl(version, modules) {
     sh """#!/usr/bin/env bash
 
     updateControl() {
+        local gitUserName=\$(git config --get user.name)
+        local gitEmail=\$(git config --get user.email)
         local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
         local puppetFile=Puppetfile
         git clone -b systest --single-branch git@eid-gitlab.dmz.local:puppet/puppet_control.git \${workDirectory}
@@ -71,8 +75,8 @@ private void updateControl(version, modules) {
         sed -ie "/\${module}/ s/:ref => '[^']*'/:ref => '${version}'/" \${puppetFile}
         done
         git add \${puppetFile}
-        git config --local user.name 'Jenkins'
-        git config --local user.email 'jenkins@difi.no'
+        git config --local user.name "\${gitUserName}"
+        git config --local user.email "\${gitEmail}"
         git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version}" \${puppetFile}
         git push
         cd -
