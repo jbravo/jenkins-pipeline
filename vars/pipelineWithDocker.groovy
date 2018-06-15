@@ -7,7 +7,6 @@ def call(body) {
     String projectName = JOB_NAME.tokenize('/')[0]
     Components components = new Components(projectName)
     Jira jira = components.jira
-    Docker dockerClient = components.docker
     Git git = components.git
     String stagingLock = projectName + '-staging'
     String productionLock = projectName + '-production'
@@ -393,21 +392,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.productionEnvironment, env.version
+                        components.productionDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            dockerClient.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -436,19 +432,18 @@ def call(body) {
                         }
                         steps {
                             script {
-                                git.checkoutVerificationBranch()
-                                dockerClient.deployStack params.productionEnvironment, params.stackName, env.version
+                                components.productionDeploy.script(params)
                             }
                         }
                         post {
                             failure {
                                 script {
-                                    git.deleteWorkBranch()
+                                    components.productionDeploy.failureScript(params)
                                 }
                             }
                             aborted {
                                 script {
-                                    git.deleteWorkBranch()
+                                    components.productionDeploy.abortedScript(params)
                                 }
                             }
                         }

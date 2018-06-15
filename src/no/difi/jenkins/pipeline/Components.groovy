@@ -3,6 +3,9 @@ package no.difi.jenkins.pipeline
 import no.difi.jenkins.pipeline.stages.CheckBuild
 import no.difi.jenkins.pipeline.stages.IntegrateCode
 import no.difi.jenkins.pipeline.stages.PrepareVerification
+import no.difi.jenkins.pipeline.stages.ProductionDeliverDocker
+import no.difi.jenkins.pipeline.stages.ProductionDeliverJava
+import no.difi.jenkins.pipeline.stages.ProductionDeploy
 import no.difi.jenkins.pipeline.stages.StagingDeliverDocker
 import no.difi.jenkins.pipeline.stages.StagingDeliverJava
 import no.difi.jenkins.pipeline.stages.StagingDeploy
@@ -43,6 +46,9 @@ class Components {
     StagingDeploy stagingDeploy
     IntegrateCode integrateCode
     WaitForApproval waitForApproval
+    ProductionDeliverJava productionDeliverJava
+    ProductionDeliverDocker productionDeliverDocker
+    ProductionDeploy productionDeploy
 
     Components(def jobName) {
         File configFile = "/config.yaml" as File
@@ -130,6 +136,21 @@ class Components {
         waitForApproval = new WaitForApproval()
         waitForApproval.jira = jira
         waitForApproval.git = git
+        productionDeliverJava = new ProductionDeliverJava()
+        productionDeliverJava.jira = jira
+        productionDeliverJava.git = git
+        productionDeliverJava.maven = maven
+        productionDeliverDocker = new ProductionDeliverDocker()
+        productionDeliverDocker.jira = jira
+        productionDeliverDocker.git = git
+        productionDeliverDocker.dockerClient = docker
+        productionDeliverDocker.maven = maven
+        productionDeploy = new ProductionDeploy()
+        productionDeploy.git = git
+        productionDeploy.jira = jira
+        productionDeploy.puppet = puppet
+        productionDeploy.dockerClient = docker
+        productionDeploy.maven = maven
     }
 
 }

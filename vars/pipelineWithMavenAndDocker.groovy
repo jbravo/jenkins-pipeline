@@ -11,8 +11,6 @@ def call(body) {
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
-    Maven maven = components.maven
-    Puppet puppet = components.puppet
     String stagingLock = projectName + '-staging'
     String productionLock = projectName + '-production'
     String agentImage = 'difi/jenkins-agent'
@@ -481,21 +479,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.productionEnvironment)
+                        components.productionDeliverJava.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverJava.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverJava.abortedScript(params)
                         }
                     }
                 }
@@ -515,23 +510,18 @@ def call(body) {
                 }
                 steps {
                     script {
-                        git.checkoutVerificationBranch()
-                        dockerClient.buildAndPublish params.productionEnvironment, env.version
+                        components.productionDeliverDocker.script(params)
                     }
                 }
                 post {
                     failure {
                         script {
-                            dockerClient.deletePublished params.productionEnvironment, env.version
-                            maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverDocker.failureScript(params)
                         }
                     }
                     aborted {
                         script {
-                            dockerClient.deletePublished params.productionEnvironment, env.version
-                            maven.deletePublished params.productionEnvironment, env.version
-                            git.deleteWorkBranch()
+                            components.productionDeliverDocker.abortedScript(params)
                         }
                     }
                 }
@@ -560,27 +550,18 @@ def call(body) {
                         }
                         steps {
                             script {
-                                git.checkoutVerificationBranch()
-                                if (params.productionEnvironmentType == 'puppet') {
-                                    puppet.deploy params.productionEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
-                                } else if (params.productionEnvironmentType == 'docker') {
-                                    dockerClient.deployStack params.productionEnvironment, params.stackName, env.version
-                                }
+                                components.productionDeploy.script(params)
                             }
                         }
                         post {
                             failure {
                                 script {
-                                    dockerClient.deletePublished params.productionEnvironment, env.version
-                                    maven.deletePublished params.productionEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.productionDeploy.failureScript(params)
                                 }
                             }
                             aborted {
                                 script {
-                                    dockerClient.deletePublished params.productionEnvironment, env.version
-                                    maven.deletePublished params.productionEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.productionDeploy.abortedScript(params)
                                 }
                             }
                         }
