@@ -262,8 +262,7 @@ boolean waitUntilVerificationIsStarted() {
     echo "Waiting for issue status to change from 'ready for verification'..."
     Poll pollResponse = pollUntilIssueStatusIsNot(config.statuses.readyForVerification)
     if (pollResponse == null) return false
-    if (!waitForCallback(pollResponse))
-        return false
+    waitForCallback(pollResponse)
     if (issueStatusIs(config.statuses.readyForVerification))
         changeIssueStatus config.transitions.startVerification
     assertIssueStatusIn([config.statuses.codeReview, config.statuses.codeApproved])
@@ -273,8 +272,7 @@ boolean waitUntilCodeReviewIsFinished() {
     echo "Waiting for issue status to change from 'code review'..."
     Poll poll = pollUntilIssueStatusIsNot config.statuses.codeReview
     if (poll == null) return false
-    if (!waitForCallback(poll))
-        return false
+    waitForCallback(poll)
     if (issueStatusIs(config.statuses.codeReview))
         changeIssueStatus config.transitions.approveCode
 }
@@ -292,8 +290,7 @@ boolean waitUntilManualVerificationIsStarted() {
     echo "Waiting for issue status to change to 'manual verification'..."
     Poll pollResponse = pollUntilIssueStatusIsNot config.statuses.codeApproved
     if (pollResponse == null) return false
-    if (!waitForCallback(pollResponse))
-        return false
+    waitForCallback(pollResponse)
     assertIssueStatusIn([config.statuses.manualVerification, config.statuses.manualVerificationOk, config.statuses.manualVerificationFailed])
 }
 
@@ -302,9 +299,7 @@ private boolean assertIssueStatusIn(List statuses) {
     if (issueStatus in statuses) {
         return true
     } else {
-        echo "Issue status is ${issueStatus}, which is not in ${statuses} - aborting"
-        env.jobAborted = 'true'
-        return false
+        errorHandler.trigger("Issue status is ${issueStatus}, which is not in ${statuses}")
     }
 }
 
@@ -321,7 +316,7 @@ private boolean waitUntilManualVerificationIsFinished(List<String> issues) {
     if (!issues.isEmpty()) {
         Poll pollResponse = pollUntilIssueStatusIsNot issues, config.statuses.manualVerification
         if (pollResponse == null) return false
-        if (!waitForCallback(pollResponse)) return false
+        waitForCallback(pollResponse)
     }
     List<String> failedIssues = new ArrayList<>()
     List<String> notVerifiedIssues = new ArrayList<>()
@@ -350,17 +345,11 @@ private boolean waitUntilManualVerificationIsFinished(List<String> issues) {
 }
 
 /**
- * Waits synchronously for a callback for a given poll. Returns <code>true</code> if poll succeeded,
- * otherwise <code>false</code>.
+ * Waits synchronously for a callback for a given poll.
  */
-private boolean waitForCallback(Poll poll) {
+private void waitForCallback(Poll poll) {
     try {
         input message: 'Waiting for callback from polling-agent', id: poll.callbackId()
-        true
-    } catch (FlowInterruptedException e) {
-        echo "Waiting for callback was aborted"
-        env.jobAborted = 'true'
-        false
     } finally {
         deletePollJob poll.pollId()
     }
@@ -449,31 +438,6 @@ private void changeIssueStatus(def sourceStatus, def transitionId) {
     }
 }
 
-private Poll pollUntilIssueStatusIs(def targetStatus) {
-    List<String> issueIds = singletonList(issueId())
-    String callbackId = callbackId()
-    try {
-        String pollId = httpRequest(
-                url: pollingAgentUrl(),
-                httpMode: 'POST',
-                contentType: 'APPLICATION_JSON_UTF8',
-                requestBody: toJson(
-                        [
-                                jiraAddress: config.url,
-                                callbackAddress: callbackAddress(callbackId),
-                                positiveTargetStatus: targetStatus,
-                                issues: issueIds
-                        ]
-                )
-        ).content
-        new Poll(pollId: pollId, callbackId: callbackId)
-    } catch (e) {
-        echo "Initiating polling failed: ${e}"
-        env.jobAborted = 'true'
-        null
-    }
-}
-
 private Poll pollUntilIssueStatusIsNot(def targetStatus) {
     pollUntilIssueStatusIsNot singletonList(issueId()), targetStatus
 }
@@ -496,9 +460,7 @@ private Poll pollUntilIssueStatusIsNot(List<String> issueIds, def targetStatus) 
         ).content
         new Poll(pollId: pollId, callbackId: callbackId)
     } catch (e) {
-        echo "Initiating polling failed: ${e}"
-        env.jobAborted = 'true'
-        null
+        errorHandler.trigger("Initiating polling failed: ${e}")
     }
 }
 
@@ -519,10 +481,6 @@ private static String pollingAgentUrl() {
 }
 
 void addFailureComment() {
-    if (env.jobAborted == 'true') {
-        addAbortedComment()
-        return
-    }
     echo "Adding failure comment to Jira issue"
     if (env.errorMessage != null)
         addComment("[Build ${env.BUILD_NUMBER}|${env.BUILD_URL}] failed in stage '${STAGE_NAME}': ${env.errorMessage}")

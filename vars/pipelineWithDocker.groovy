@@ -75,6 +75,18 @@ def call(body) {
                         components.waitForVerificationToStart.script()
                     }
                 }
+                post {
+                    failure {
+                        script {
+                            components.waitForVerificationToStart.failureScript()
+                        }
+                    }
+                    aborted {
+                        script {
+                            components.waitForVerificationToStart.abortedScript()
+                        }
+                    }
+                }
             }
             stage('Wait for verification slot') {
                 when {
@@ -226,7 +238,19 @@ def call(body) {
                 }
                 steps {
                     script {
-                        jira.waitUntilCodeReviewIsFinished()
+                        components.waitForCodeReviewToFinish.script()
+                    }
+                }
+                post {
+                    failure {
+                        script {
+                            components.waitForCodeReviewToFinish.failureScript()
+                        }
+                    }
+                    aborted {
+                        script {
+                            components.waitForCodeReviewToFinish.abortedScript()
+                        }
                     }
                 }
             }
@@ -341,14 +365,18 @@ def call(body) {
                     stage('Wait for approval') {
                         steps {
                             script {
-                                if (!jira.waitUntilManualVerificationIsStarted()) return // Not needed when lock on sequential stages is supported
-                                if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
-                                if (!jira.fixVersions().contains(env.version)) {
-                                    env.verification = 'false'
-                                    node() {
-                                        checkout scm
-                                        git.deleteWorkBranch()
-                                    }
+                                components.waitForApproval.script()
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.waitForApproval.failureScript()
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.waitForApproval.abortedScript()
                                 }
                             }
                         }
@@ -370,7 +398,6 @@ def call(body) {
                 }
                 steps {
                     script {
-                        failIfJobIsAborted()
                         git.checkoutVerificationBranch()
                         dockerClient.buildAndPublish params.productionEnvironment, env.version
                     }
@@ -447,7 +474,6 @@ def call(body) {
                 }
                 steps {
                     script {
-                        failIfJobIsAborted()
                         jira.close env.version, env.sourceCodeRepository
                         git.deleteWorkBranch()
                     }

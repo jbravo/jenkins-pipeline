@@ -9,6 +9,8 @@ import no.difi.jenkins.pipeline.stages.VerificationDeliverDocker
 import no.difi.jenkins.pipeline.stages.VerificationDeliverJava
 import no.difi.jenkins.pipeline.stages.VerificationDeploy
 import no.difi.jenkins.pipeline.stages.VerificationTests
+import no.difi.jenkins.pipeline.stages.WaitForApproval
+import no.difi.jenkins.pipeline.stages.WaitForCodeReviewToFinish
 import no.difi.jenkins.pipeline.stages.WaitForVerificationSlot
 import no.difi.jenkins.pipeline.stages.WaitForVerificationToStart
 @Grab('org.yaml:snakeyaml:1.19')
@@ -34,9 +36,11 @@ class Components {
     VerificationDeliverDocker verificationDeliverDocker
     VerificationDeploy verificationDeploy
     VerificationTests verificationTests
+    WaitForCodeReviewToFinish waitForCodeReviewToFinish
     StagingDeliverJava stagingDeliverJava
     StagingDeliverDocker stagingDeliverDocker
     IntegrateCode integrateCode
+    WaitForApproval waitForApproval
 
     Components(def jobName) {
         File configFile = "/config.yaml" as File
@@ -75,7 +79,6 @@ class Components {
         waitForVerificationSlot = new WaitForVerificationSlot()
         waitForVerificationSlot.git = git
         waitForVerificationSlot.jira = jira
-        waitForVerificationSlot.errorHandler = errorHandler
         prepareVerification = new PrepareVerification()
         prepareVerification.git = git
         prepareVerification.jira = jira
@@ -99,23 +102,26 @@ class Components {
         verificationTests.git = git
         verificationTests.dockerClient = docker
         verificationTests.maven = maven
+        waitForCodeReviewToFinish = new WaitForCodeReviewToFinish()
+        waitForCodeReviewToFinish.jira = jira
+        waitForCodeReviewToFinish.git = git
         stagingDeliverJava = new StagingDeliverJava()
         stagingDeliverJava.jira = jira
         stagingDeliverJava.git = git
         stagingDeliverJava.maven = maven
-        stagingDeliverJava.errorHandler = errorHandler
         stagingDeliverDocker = new StagingDeliverDocker()
         stagingDeliverDocker.jira = jira
         stagingDeliverDocker.git = git
         stagingDeliverDocker.dockerClient = docker
         stagingDeliverDocker.maven = maven
-        stagingDeliverDocker.errorHandler = errorHandler
         integrateCode = new IntegrateCode()
         integrateCode.jira = jira
         integrateCode.git = git
         integrateCode.maven = maven
         integrateCode.dockerClient = docker
-        integrateCode.errorHandler = errorHandler
+        waitForApproval = new WaitForApproval()
+        waitForApproval.jira = jira
+        waitForApproval.git = git
     }
 
 }
