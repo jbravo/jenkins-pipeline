@@ -18,6 +18,8 @@ def call(body) {
             '-u root:root'
     Map params = [:]
     params.stagingQueue = false
+    params.stagingEnvironmentType = 'docker'
+    params.productionEnvironmentType = 'docker'
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
@@ -328,7 +330,7 @@ def call(body) {
                 parallel() {
                     stage('Deploy') {
                         options {
-                            lock resource: "docker:${params.stagingEnvironment}"
+                            lock resource: "${params.stagingEnvironmentType}:${params.stagingEnvironment}"
                         }
                         agent {
                             docker {
@@ -339,25 +341,18 @@ def call(body) {
                         }
                         steps {
                             script {
-                                git.checkoutVerificationBranch()
-                                jira.updateIssuesForManualVerification env.version, env.sourceCodeRepository
-                                dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
-                                jira.startManualVerification()
+                                components.stagingDeploy.script(params)
                             }
                         }
                         post {
                             failure {
                                 script {
-                                    jira.stagingFailed()
-                                    dockerClient.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.stagingDeploy.failureScript(params)
                                 }
                             }
                             aborted {
                                 script {
-                                    jira.stagingFailed()
-                                    dockerClient.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.stagingDeploy.abortedScript(params)
                                 }
                             }
                         }
@@ -430,7 +425,7 @@ def call(body) {
                 parallel() {
                     stage('Deploy') {
                         options {
-                            lock resource: "docker:${params.productionEnvironment}"
+                            lock resource: "${params.productionEnvironmentType}:${params.productionEnvironment}"
                         }
                         agent {
                             docker {
@@ -510,5 +505,3 @@ def call(body) {
     }
 
 }
-
-

@@ -5,6 +5,7 @@ import no.difi.jenkins.pipeline.stages.IntegrateCode
 import no.difi.jenkins.pipeline.stages.PrepareVerification
 import no.difi.jenkins.pipeline.stages.StagingDeliverDocker
 import no.difi.jenkins.pipeline.stages.StagingDeliverJava
+import no.difi.jenkins.pipeline.stages.StagingDeploy
 import no.difi.jenkins.pipeline.stages.VerificationDeliverDocker
 import no.difi.jenkins.pipeline.stages.VerificationDeliverJava
 import no.difi.jenkins.pipeline.stages.VerificationDeploy
@@ -39,6 +40,7 @@ class Components {
     WaitForCodeReviewToFinish waitForCodeReviewToFinish
     StagingDeliverJava stagingDeliverJava
     StagingDeliverDocker stagingDeliverDocker
+    StagingDeploy stagingDeploy
     IntegrateCode integrateCode
     WaitForApproval waitForApproval
 
@@ -114,6 +116,12 @@ class Components {
         stagingDeliverDocker.git = git
         stagingDeliverDocker.dockerClient = docker
         stagingDeliverDocker.maven = maven
+        stagingDeploy = new StagingDeploy()
+        stagingDeploy.git = git
+        stagingDeploy.jira = jira
+        stagingDeploy.puppet = puppet
+        stagingDeploy.dockerClient = docker
+        stagingDeploy.maven = maven
         integrateCode = new IntegrateCode()
         integrateCode.jira = jira
         integrateCode.git = git

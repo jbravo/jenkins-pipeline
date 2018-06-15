@@ -429,31 +429,18 @@ def call(body) {
                         }
                         steps {
                             script {
-                                git.checkoutVerificationBranch()
-                                jira.updateIssuesForManualVerification env.version, env.sourceCodeRepository
-                                if (params.stagingEnvironmentType == 'puppet') {
-                                    puppet.deploy params.stagingEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
-                                } else if (params.stagingEnvironmentType == 'docker') {
-                                    dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
-                                }
-                                jira.startManualVerification()
+                                components.stagingDeploy.script(params)
                             }
                         }
                         post {
                             failure {
                                 script {
-                                    jira.stagingFailed()
-                                    dockerClient.deletePublished params.stagingEnvironment, env.version
-                                    maven.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.stagingDeploy.failureScript(params)
                                 }
                             }
                             aborted {
                                 script {
-                                    jira.stagingFailed()
-                                    dockerClient.deletePublished params.stagingEnvironment, env.version
-                                    maven.deletePublished params.stagingEnvironment, env.version
-                                    git.deleteWorkBranch()
+                                    components.stagingDeploy.abortedScript(params)
                                 }
                             }
                         }
@@ -472,7 +459,7 @@ def call(body) {
                             }
                             aborted {
                                 script {
-                                   components.waitForApproval.abortedScript()
+                                    components.waitForApproval.abortedScript()
                                 }
                             }
                         }
