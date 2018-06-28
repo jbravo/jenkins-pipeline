@@ -15,7 +15,6 @@ import no.difi.jenkins.pipeline.stages.VerificationDeploy
 import no.difi.jenkins.pipeline.stages.VerificationTests
 import no.difi.jenkins.pipeline.stages.WaitForApproval
 import no.difi.jenkins.pipeline.stages.WaitForCodeReviewToFinish
-import no.difi.jenkins.pipeline.stages.WaitForVerificationSlot
 import no.difi.jenkins.pipeline.stages.WaitForVerificationToStart
 @Grab('org.yaml:snakeyaml:1.19')
 import org.yaml.snakeyaml.Yaml
@@ -34,7 +33,6 @@ class Components {
     Puppet puppet
     CheckBuild checkBuild
     WaitForVerificationToStart waitForVerificationToStart
-    WaitForVerificationSlot waitForVerificationSlot
     PrepareVerification prepareVerification
     VerificationDeliverJava verificationDeliverJava
     VerificationDeliverDocker verificationDeliverDocker
@@ -84,9 +82,6 @@ class Components {
         checkBuild.maven = maven
         waitForVerificationToStart = new WaitForVerificationToStart()
         waitForVerificationToStart.jira = jira
-        waitForVerificationSlot = new WaitForVerificationSlot()
-        waitForVerificationSlot.git = git
-        waitForVerificationSlot.jira = jira
         prepareVerification = new PrepareVerification()
         prepareVerification.git = git
         prepareVerification.jira = jira

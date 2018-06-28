@@ -2,8 +2,6 @@ import no.difi.jenkins.pipeline.Components
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
-import no.difi.jenkins.pipeline.Maven
-import no.difi.jenkins.pipeline.Puppet
 
 def call(body) {
     String projectName = JOB_NAME.tokenize('/')[0]
@@ -11,8 +9,6 @@ def call(body) {
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
-    String stagingLock = projectName + '-staging'
-    String productionLock = projectName + '-production'
     String agentImage = 'difi/jenkins-agent'
     String agentArgs = '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
             '--network pipeline_pipeline ' +
@@ -25,11 +21,14 @@ def call(body) {
     body.resolveStrategy = Closure.DELEGATE_FIRST
     body.delegate = params
     body()
-    if (params.javaVersion == 9)
-        agentImage = 'difi/jenkins-agent-java9'
+    String verificationLock = projectName + "-verification"
+    String stagingLock = projectName + '-staging'
+    String productionLock = projectName + '-production'
     if (!params.stagingQueue) {
         stagingLock += "-${BRANCH_NAME}"
     }
+    if (params.javaVersion == 9)
+        agentImage = 'difi/jenkins-agent-java9'
     node() {
         checkout scm
         env.verification = 'false'
@@ -72,7 +71,7 @@ def call(body) {
                     }
                 }
             }
-            stage('Wait for verification to start') {
+            stage('Wait for code reviewer') {
                 when {
                     environment name: 'verification', value: 'true'
                 }
@@ -94,311 +93,214 @@ def call(body) {
                     }
                 }
             }
-            stage('Wait for verification slot') {
+            stage('Verification') {
+                options {
+                    lock resource: verificationLock
+                }
                 when {
                     beforeAgent true
                     environment name: 'verification', value: 'true'
                 }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.waitForVerificationSlot.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.waitForVerificationSlot.failureScript()
+                stages {
+                    stage('Prepare') {
+                        environment {
+                            crucible = credentials('crucible')
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.prepareVerification.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.prepareVerification.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.prepareVerification.abortedScript(params)
+                                }
+                            }
                         }
                     }
-                    aborted {
-                        script {
-                            components.waitForVerificationSlot.abortedScript()
+                    stage('Deliver (Java)') {
+                        when {
+                            beforeAgent true
+                            expression { params.verificationEnvironment != null }
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.verificationDeliverJava.script(params)
+                            }
+                        }
+                        post {
+                            always {
+                                junit '**/target/surefire-reports/TEST-*.xml'
+                            }
+                            failure {
+                                script {
+                                    components.verificationDeliverJava.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.verificationDeliverJava.abortedScript(params)
+                                }
+                            }
                         }
                     }
-                }
-            }
-            stage('Prepare verification') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                }
-                environment {
-                    crucible = credentials('crucible')
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.prepareVerification.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.prepareVerification.failureScript(params)
+                    stage('Deliver (Docker)') {
+                        when {
+                            expression { params.verificationEnvironment != null }
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.verificationDeliverDocker.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.verificationDeliverDocker.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.verificationDeliverDocker.abortedScript(params)
+                                }
+                            }
                         }
                     }
-                    aborted {
-                        script {
-                            components.prepareVerification.abortedScript(params)
+                    stage('Deploy') {
+                        when {
+                            beforeAgent true
+                            expression { params.verificationEnvironment != null }
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.verificationDeploy.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.verificationDeploy.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.verificationDeploy.abortedScript(params)
+                                }
+                            }
                         }
                     }
-                }
-            }
-            stage('Verification deliver (Java)') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.verificationEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.verificationDeliverJava.script(params)
-                    }
-                }
-                post {
-                    always {
-                        junit '**/target/surefire-reports/TEST-*.xml'
-                    }
-                    failure {
-                        script {
-                            components.verificationDeliverJava.failureScript(params)
+                    stage('Test') {
+                        when {
+                            beforeAgent true
+                            expression { params.verificationEnvironment != null }
+                        }
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.verificationTests.script(params)
+                            }
+                        }
+                        post {
+                            always {
+                                script {
+                                    dockerClient.removeStack params.verificationEnvironment, env.stackName
+                                }
+                            }
+                            failure {
+                                script {
+                                    components.verificationTests.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.verificationTests.abortedScript(params)
+                                }
+                            }
                         }
                     }
-                    aborted {
-                        script {
-                            components.verificationDeliverJava.abortedScript(params)
+                    stage('Review') {
+                        steps {
+                            script {
+                                components.waitForCodeReviewToFinish.script()
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.waitForCodeReviewToFinish.failureScript()
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.waitForCodeReviewToFinish.abortedScript()
+                                }
+                            }
                         }
                     }
-                }
-            }
-            stage('Verification deliver (Docker)') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.verificationEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.verificationDeliverDocker.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.verificationDeliverDocker.failureScript(params)
+                    stage('Integrate code') {
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
                         }
-                    }
-                    aborted {
-                        script {
-                            components.verificationDeliverDocker.abortedScript(params)
+                        steps {
+                            script {
+                                components.integrateCode.script()
+                            }
                         }
-                    }
-                }
-            }
-            stage('Verification deploy') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.verificationEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.verificationDeploy.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.verificationDeploy.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.verificationDeploy.abortedScript(params)
-                        }
-                    }
-                }
-            }
-            stage('Verification tests') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.verificationEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.verificationTests.script(params)
-                    }
-                }
-                post {
-                    always {
-                        script {
-                            dockerClient.removeStack params.verificationEnvironment, env.stackName
-                        }
-                    }
-                    failure {
-                        script {
-                            components.verificationTests.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.verificationTests.abortedScript(params)
-                        }
-                    }
-                }
-            }
-            stage('Wait for code review to finish') {
-                when {
-                    environment name: 'verification', value: 'true'
-                }
-                steps {
-                    script {
-                        components.waitForCodeReviewToFinish.script()
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.waitForCodeReviewToFinish.failureScript()
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.waitForCodeReviewToFinish.abortedScript()
-                        }
-                    }
-                }
-            }
-            stage('Staging deliver') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.stagingEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.stagingDeliverJava.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.stagingDeliverJava.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.stagingDeliverJava.abortedScript(params)
-                        }
-                    }
-                }
-            }
-            stage('Staging deliver (Docker)') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.stagingEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.stagingDeliverDocker.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.stagingDeliverDocker.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.stagingDeliverDocker.abortedScript(params)
-                        }
-                    }
-                }
-            }
-            stage('Integrate code') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.integrateCode.script()
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.integrateCode.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.integrateCode.abortedScript(params)
+                        post {
+                            failure {
+                                script {
+                                    components.integrateCode.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.integrateCode.abortedScript(params)
+                                }
+                            }
                         }
                     }
                 }
@@ -412,11 +314,62 @@ def call(body) {
                     environment name: 'verification', value: 'true'
                     expression { params.stagingEnvironment != null }
                 }
-                failFast true
-                parallel() {
+                stages {
+                    stage('Deliver (Java)') {
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.stagingDeliverJava.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.stagingDeliverJava.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.stagingDeliverJava.abortedScript(params)
+                                }
+                            }
+                        }
+                    }
+                    stage('Deliver (Docker)') {
+                        agent {
+                            docker {
+                                label 'slave'
+                                image agentImage
+                                args agentArgs
+                            }
+                        }
+                        steps {
+                            script {
+                                components.stagingDeliverDocker.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.stagingDeliverDocker.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.stagingDeliverDocker.abortedScript(params)
+                                }
+                            }
+                        }
+                    }
                     stage('Deploy') {
                         options {
-                            lock resource: "${params.stagingEnvironmentType}:${params.stagingEnvironment}"
+                            lock resource: "docker:${params.stagingEnvironment}"
                         }
                         agent {
                             docker {
@@ -443,7 +396,7 @@ def call(body) {
                             }
                         }
                     }
-                    stage('Wait for approval') {
+                    stage('Review') {
                         steps {
                             script {
                                 components.waitForApproval.script()
@@ -464,68 +417,6 @@ def call(body) {
                     }
                 }
             }
-            stage('Production deliver (Java)') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.productionEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.productionDeliverJava.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.productionDeliverJava.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.productionDeliverJava.abortedScript(params)
-                        }
-                    }
-                }
-            }
-            stage('Production deliver (Docker)') {
-                when {
-                    beforeAgent true
-                    environment name: 'verification', value: 'true'
-                    expression { params.productionEnvironment != null }
-                }
-                agent {
-                    docker {
-                        label 'slave'
-                        image agentImage
-                        args agentArgs
-                    }
-                }
-                steps {
-                    script {
-                        components.productionDeliverDocker.script(params)
-                    }
-                }
-                post {
-                    failure {
-                        script {
-                            components.productionDeliverDocker.failureScript(params)
-                        }
-                    }
-                    aborted {
-                        script {
-                            components.productionDeliverDocker.abortedScript(params)
-                        }
-                    }
-                }
-            }
             stage('Production') {
                 options {
                     lock resource: productionLock
@@ -535,18 +426,55 @@ def call(body) {
                     environment name: 'verification', value: 'true'
                     expression { params.productionEnvironment != null }
                 }
-                failFast true
-                parallel() {
+                agent {
+                    docker {
+                        label 'slave'
+                        image agentImage
+                        args agentArgs
+                    }
+                }
+                stages {
+                    stage('Deliver (Java)') {
+                        steps {
+                            script {
+                                components.productionDeliverJava.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.productionDeliverJava.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.productionDeliverJava.abortedScript(params)
+                                }
+                            }
+                        }
+                    }
+                    stage('Deliver (Docker)') {
+                        steps {
+                            script {
+                                components.productionDeliverDocker.script(params)
+                            }
+                        }
+                        post {
+                            failure {
+                                script {
+                                    components.productionDeliverDocker.failureScript(params)
+                                }
+                            }
+                            aborted {
+                                script {
+                                    components.productionDeliverDocker.abortedScript(params)
+                                }
+                            }
+                        }
+                    }
                     stage('Deploy') {
                         options {
-                            lock resource: "${params.productionEnvironmentType}:${params.productionEnvironment}"
-                        }
-                        agent {
-                            docker {
-                                label 'slave'
-                                image agentImage
-                                args agentArgs
-                            }
+                            lock resource: "docker:${params.productionEnvironment}"
                         }
                         steps {
                             script {

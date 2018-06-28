@@ -8,7 +8,6 @@ Jira jira
 
 void script() {
     echo "Waiting for approval..."
-    if (!jira.waitUntilManualVerificationIsStarted()) return
     if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
     if (!jira.fixVersions().contains(env.version)) {
         env.verification = 'false'
