@@ -113,6 +113,10 @@ void buildAndPublish(def environmentId, def version) {
 }
 
 void deletePublished(def environmentId, def version) {
+    if (!environments.isDockerDeploySupported(environmentId)) {
+        echo "Delivery of Docker images is not supported for environment '${environmentId}', will not attempt to delete published images"
+        return
+    }
     echo "Deleting published Docker images for environment ${environmentId} with version ${version}..."
     def credentialsId = environments.dockerRegistryCredentialsId(environmentId)
     if (credentialsId == null) {
