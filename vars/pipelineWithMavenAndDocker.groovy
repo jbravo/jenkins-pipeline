@@ -29,6 +29,8 @@ def call(body) {
     }
     if (params.javaVersion == 9)
         agentImage = 'difi/jenkins-agent-java9'
+    if (params.javaVersion == 10)
+        agentImage = 'difi/jenkins-agent-java10'
     node() {
         checkout scm
         env.verification = 'false'
