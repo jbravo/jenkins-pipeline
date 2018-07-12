@@ -119,14 +119,15 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
     String host = environments.dockerSwarmHost(environmentId)
     Map servicePorts = docker.servicePorts(
             sshKey, user, host, stackName,
-            'eid-atest-admin', 'eid-atest-idp-app', 'selenium', 'eid-atest-db'
+            'eid-atest-admin:10001','eid-atest-admin:10006', 'eid-atest-idp-app:10001', 'selenium:4444', 'eid-atest-db:3306'
     )
     int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
-        -DadminDirectBaseURL=http://${host}:${servicePorts.get('eid-atest-admin')}/idporten-admin/\
-        -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('eid-atest-idp-app')}/minid_filegateway/\
-        -DseleniumUrl=http://${host}:${servicePorts.get('selenium')}/wd/hub\
-        -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db')}
+        -DadminDirectBaseURL=http://${host}:${servicePorts.get('eid-atest-admin:10001')}/idporten-admin/\
+        -Dbaseurl=http://${host}:${servicePorts.get('eid-atest-admin:10006')}/serviceprovider
+        -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('eid-atest-idp-app:10001')}/minid_filegateway/\
+        -DseleniumUrl=http://${host}:${servicePorts.get('selenium:4444')}/wd/hub\
+        -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db:3306')}
     """
     cucumber 'system-tests/target/cucumber-report.json'
     new VerificationTestResult(
