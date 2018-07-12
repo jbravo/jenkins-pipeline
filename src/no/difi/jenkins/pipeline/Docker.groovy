@@ -81,7 +81,7 @@ Map servicePorts(def sshKey, def user, def host, def stackName, String...service
     services.each { service ->
         def (serviceName, serviceFixedPort) = service.split( ':' )
         if (serviceExists(stackName, serviceName, dockerHost)) {
-            String port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{range $i, $value := .Endpoint.Ports}} {{if eq $value.TargetPort ${serviceFixedPort} }}{{$value.PublishedPort}}{{end}}{{end}}' ${stackName}_${serviceName}").trim()
+            String port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{range \$i, \$value := .Endpoint.Ports}} {{if eq \$value.TargetPort ${serviceFixedPort} }}{{\$value.PublishedPort}}{{end}}{{end}}' ${stackName}_${serviceName}").trim()
             portMap.put(service, port)
         }
     }
