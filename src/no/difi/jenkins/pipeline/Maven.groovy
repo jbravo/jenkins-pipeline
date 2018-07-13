@@ -123,8 +123,8 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
     )
     int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
-        -DadminDirectBaseURL=http://${host}:${servicePorts.get('eid-atest-admin:10001')}/idporten-admin/\
-        -Dbaseurl=http://${host}:${servicePorts.get('eid-atest-admin:10006')}/serviceprovider/\
+        -DadminDirectBaseURL=http://${host}:${servicePorts.get('eid-atest-admin:10006')}/idporten-admin/\
+        -Dbaseurl=http://${host}:${servicePorts.get('eid-atest-admin:10001')}/serviceprovider/\
         -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('eid-atest-idp-app:10001')}/minid_filegateway/\
         -DseleniumUrl=http://${host}:${servicePorts.get('selenium:4444')}/wd/hub\
         -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db:3306')}
