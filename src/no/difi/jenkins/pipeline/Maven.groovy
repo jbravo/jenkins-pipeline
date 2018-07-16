@@ -129,7 +129,7 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
         -DseleniumUrl=http://${host}:${servicePorts.get('selenium:4444')}/wd/hub\
         -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db:3306')}
     """
-    cucumber 'system-tests/target/cucumber-report.json'
+    cucumber 'system-tests/target/*.json'
     new VerificationTestResult(
             success: status == 0,
             reportUrl: "${env.BUILD_URL}cucumber-html-reports/overview-features.html"
