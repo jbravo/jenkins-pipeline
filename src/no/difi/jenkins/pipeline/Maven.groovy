@@ -119,7 +119,7 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
     String host = environments.dockerSwarmHost(environmentId)
     Map servicePorts = docker.servicePorts(
             sshKey, user, host, stackName,
-            'eid-atest-client-admin:10001','eid-atest-admin:10006', 'eid-atest-idp-app:10001', 'selenium:4444', 'eid-atest-db:3306'
+            'eid-atest-client-admin:10001','eid-atest-admin:10006', 'eid-atest-idp-app:10001', 'selenium:4444', 'eid-atest-db:3306' ,'eid-atest-client-admin:10004'
     )
     int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
@@ -127,6 +127,7 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
         -Dserviceproviderbackendurl=http://${host}:${servicePorts.get('eid-atest-client-admin:10001')}/serviceprovider/\
         -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('eid-atest-idp-app:10001')}/minid_filegateway/\
         -DseleniumUrl=http://${host}:${servicePorts.get('selenium:4444')}/wd/hub\
+        -Dexternal_baseurl=http://${host}:${servicePorts.get('eid-atest-client-admin:10004')}\
         -DdatabaseUrl=${host}:${servicePorts.get('eid-atest-db:3306')}
     """
     cucumber 'system-tests/target/*.json'
