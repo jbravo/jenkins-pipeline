@@ -9,7 +9,6 @@ Git git
 Maven maven
 
 void script(def params) {
-    jira.failIfCodeNotApproved()
     git.checkoutVerificationBranch()
     maven.deliver(env.version, params.MAVEN_OPTS, params.parallelMavenDeploy, params.stagingEnvironment)
 }
@@ -25,7 +24,7 @@ void abortedScript(def params) {
 }
 
 private void cleanup(def params) {
-    git.deleteVerificationBranch()
+    jira.stagingFailed()
     maven.deletePublished params.stagingEnvironment, env.version
-    jira.resumeWork()
+    git.deleteWorkBranch()
 }

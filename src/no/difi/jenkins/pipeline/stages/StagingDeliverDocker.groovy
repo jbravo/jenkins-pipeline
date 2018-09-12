@@ -11,7 +11,6 @@ Docker dockerClient
 Maven maven
 
 void script(def params) {
-    jira.failIfCodeNotApproved()
     git.checkoutVerificationBranch()
     dockerClient.buildAndPublish params.stagingEnvironment, env.version
 }
@@ -27,10 +26,10 @@ void abortedScript(def params) {
 }
 
 private void cleanup(def params) {
-    git.deleteVerificationBranch()
+    jira.stagingFailed()
     dockerClient.deletePublished params.stagingEnvironment, env.version
     if (maven.isMavenProject())
         maven.deletePublished params.stagingEnvironment, env.version
-    jira.resumeWork()
+    git.deleteWorkBranch()
 }
 
