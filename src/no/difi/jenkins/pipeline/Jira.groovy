@@ -73,7 +73,6 @@ private void newVersion(def version) {
 }
 
 void createAndSetFixVersion(def version) {
-    newVersion version
     fixVersion version
 }
 
@@ -82,24 +81,21 @@ void fixVersion(def version) {
 }
 
 void fixVersion(String issueId, def version) {
-    List<String> fixVersionsToKeep = fixVersions(issueId).findAll({ it -> !it.matches("\\d{4}-\\d{2}-\\d{2}-.*")})
-    fixVersionsToKeep.add((String)version)
-    def versions = fixVersionsToKeep.collect({it -> [name: it]})
     try {
-        jiraEditIssue idOrKey: issueId, issue: [fields: [fixVersions: versions]]
+        setField("customfield_${config.fields.buildVersion}", version)
     } catch (e) {
-        errorHandler.trigger "Failed to set fix version ${version} on issue ${issueId}: ${e.message}"
+        errorHandler.trigger "Failed to set build version ${version} on issue ${issueId}: ${e.message}"
     }
 }
 
-List<String> fixVersions() {
+String fixVersions() {
     return fixVersions(issueId())
 }
 
 
-List<String> fixVersions(String issueId) {
+String fixVersions(String issueId) {
     try {
-        issueFields(issueId)['fixVersions']['name'] as List
+        issueFields(issueId)['customfield_${config.fields.buildVersion}'] as String
     } catch (e) {
         errorHandler.trigger "Failed to get fix version: ${e.message}"
     }
@@ -238,7 +234,7 @@ void close(def version, def repository) {
         changeIssueStatus config.transitions.closeWithoutStaging
     } else {
         List<String> issues = issuesToClose version, repository
-        echo "Closing all issues with version ${version}: ${issues}"
+        echo "Closing all issues with build version ${version}: ${issues}"
         issues.each { issue ->
             echo "Closing issue ${issue}"
             changeIssueStatus issue, config.transitions.close
@@ -249,7 +245,7 @@ void close(def version, def repository) {
 private List<String> issuesToClose(def version, def repository) {
     try {
         echo 'Searching for issues to close...'
-        def response = jiraJqlSearch jql: "status = ${config.statuses.manualVerificationOk} and cf[${config.fields.sourceCodeRepository}] ~ '${repository}' and fixVersion = ${version}"
+        def response = jiraJqlSearch jql: "status = ${config.statuses.manualVerificationOk} and cf[${config.fields.sourceCodeRepository}] ~ '${repository}' and cf[${config.fields.buildVersion}] ~ '${version}'"
         List<String> issues = response.data.issues['key'] as List<String>
         echo "Following issues should be closed: ${issues}"
         issues

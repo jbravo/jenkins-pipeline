@@ -9,7 +9,8 @@ Jira jira
 void script() {
     echo "Waiting for approval..."
     if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
-    if (!jira.fixVersions().contains(env.version)) {
+    String fixVersions = jira.fixVersions()
+    if (fixVersions && !fixVersions.contains(env.version)) {
         env.verification = 'false'
         node() {
             checkout scm
