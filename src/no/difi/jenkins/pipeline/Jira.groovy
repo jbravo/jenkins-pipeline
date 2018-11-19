@@ -48,15 +48,15 @@ private List<String> issuesWithStatus(def status, def repository) {
  * @param repository
  */
 void updateIssuesForManualVerification(def version, def repository) {
-    issuesWithStatus(config.statuses.manualVerification, repository).each { issueId ->
-        fixVersion issueId, version
+    issuesWithStatus(config.statuses.manualVerification, repository).each { issueWithStatusToChange ->
+        fixVersion issueWithStatusToChange, version
     }
-    issuesWithStatus(config.statuses.manualVerificationOk, repository).each { issueId ->
-        fixVersion issueId, version
+    issuesWithStatus(config.statuses.manualVerificationOk, repository).each { issueWithStatusToChange ->
+        fixVersion issueWithStatusToChange, version
     }
-    issuesWithStatus(config.statuses.manualVerificationFailed, repository).each { issueId ->
-        fixVersion issueId, version
-        changeIssueStatus issueId, config.transitions.retryManualVerificationFromFailure
+    issuesWithStatus(config.statuses.manualVerificationFailed, repository).each { issueWithStatusToChange ->
+        fixVersion issueWithStatusToChange, version
+        changeIssueStatus issueWithStatusToChange, config.transitions.retryManualVerificationFromFailure
     }
 }
 
