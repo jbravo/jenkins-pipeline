@@ -73,16 +73,20 @@ private boolean serviceExists(def stackName, String service, String dockerHost) 
     0 == sh(returnStatus: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect ${stackName}_${service} > /dev/null")
 }
 
-Map servicePorts(def sshKey, def user, def host, def stackName, String...services) {
+Map servicePorts(def environmentId, def stackName) {
+    String sshKey = environments.dockerSwarmSshKey(environmentId)
+    String user = environments.dockerSwarmUser(environmentId)
+    String host = environments.dockerSwarmHost(environmentId)
     String dockerHostFile = newDockerHostFile()
     setupSshTunnel(sshKey, dockerHostFile, user, host)
     String dockerHost = dockerHost dockerHostFile
+    services = environments.dockerOndemandServices(environmentId)
     def portMap = new HashMap()
-    services.each { service ->
-        def (serviceName, serviceFixedPort) = service.split( ':' )
+    services.each { serviceType, serviceAddress ->
+        def (serviceName, serviceFixedPort) = serviceAddress.split( ':' )
         if (serviceExists(stackName, serviceName, dockerHost)) {
             String port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{range \$i, \$value := .Endpoint.Ports}} {{if eq \$value.TargetPort ${serviceFixedPort} }}{{\$value.PublishedPort}}{{end}}{{end}}' ${stackName}_${serviceName}").trim()
-            portMap.put(service, port)
+            portMap.put(serviceType, port)
         }
     }
     sh "rm ${dockerHostFile}"

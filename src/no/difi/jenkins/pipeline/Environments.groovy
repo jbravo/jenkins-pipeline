@@ -35,6 +35,9 @@ class Environments {
     String dockerSwarmSshKey(String environmentId) {
         dockerSwarm(dockerSwarmId(environmentId)).sshKey
     }
+    String dockerOndemandServices(String environmentId) {
+        config.docker.ondemand[dockerSwarm(dockerSwarmId(environmentId)).ondemand] as Map
+    }
 
     boolean isMavenDeletionSupported(String environmentId) {
         mavenRepository(mavenRepositoryId(environmentId)).address.startsWith('http://eid-artifactory.dmz.local:8080')
