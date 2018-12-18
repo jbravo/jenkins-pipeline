@@ -12,7 +12,7 @@ Maven maven
 
 void script(def params) {
     git.checkoutVerificationBranch()
-    env.stackName = dockerClient.uniqueStackName()
+    env.stackName = dockerClient.uniqueStackName().take(8)
     dockerClient.deployStack params.verificationEnvironment, env.stackName, env.version
 }
 
