@@ -116,7 +116,7 @@ boolean verificationTestsSupported(def environmentId) {
 VerificationTestResult runVerificationTests(def environmentId, def stackName) {
 
     String host = environments.dockerSwarmHost(environmentId)
-    Map servicePorts = docker.servicePorts(environments, stackName)
+    Map servicePorts = docker.servicePorts(environmentId, stackName)
     int status = sh returnStatus: true, script: """
         mvn verify -pl system-tests -PsystemTests -B\
         -DadminDirectBaseURL=http://${host}:${servicePorts.get('admin')}/idporten-admin/\
