@@ -1,4 +1,5 @@
 package no.difi.jenkins.pipeline
+import static groovy.json.JsonOutput.toJson
 
 Environments environments
 
@@ -11,6 +12,19 @@ void deploy(def environmentId, def version, def puppetModules, def librarianModu
     }
 }
 
+void deploy2(def environmentId, def version, def puppetModules, def puppetApplyList) {
+    sshagent([environments.puppetMasterSshKey(environmentId)]) {
+        if (moduleNames().size() == 0)
+            return
+        moduleNames().each { moduleName ->
+            createRepo(moduleName, version)
+            commitRepo(moduleName, version)
+        }
+        updateHiera(version, puppetModules)
+        updateControl2(version, flattenList(moduleNames(),''))
+        apply(environmentId, flattenList(moduleNames(),'DIFI-'), puppetApplyList)
+    }
+}
 private void tagPuppetModules(version) {
     println "Tagging Puppet modules with ${version}"
     sh """#!/usr/bin/env bash
@@ -129,5 +143,94 @@ private void apply(def environmentId, def librarianModules, def applyParametersL
         apply
         """
     }
+
 }
 
+private void createRepo(def module,def version){
+    println "Creating release repo for version ${version} of module ${module}"
+    withCredentials([string(credentialsId: 'gitlab-api', variable: 'apikey')]){
+        httpRequest(
+                url: 'http://eid-gitlab.dmz.local/api/v4/projects',
+                httpMode: 'POST',
+                contentType: 'APPLICATION_JSON_UTF8',
+                customHeaders: [[maskValue: true, name: 'Private-Token', value: apikey]],
+                requestBody: toJson(
+                        [
+                                name: "${module}-${version}",
+                                namespace_id: '40',
+                                visibility: 'public',
+                        ]
+                )
+        )
+    }
+}
+
+private void commitRepo(def module,def version) {
+    println "Commitig  version ${version} of module ${module} to release repo"
+    sh """#!/usr/bin/env bash
+
+    commitRepo() {
+        local gitUserName=\$(git config --get user.name)
+        local gitEmail=\$(git config --get user.email)
+        local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
+        git clone git@eid-gitlab.dmz.local:puppet_releases/${module}-${version}.git \${workDirectory}
+        cp -r puppet_modules/${module}/* \${workDirectory}
+        cd \${workDirectory}
+        git add .
+        git config --local user.name "\${gitUserName}"
+        git config --local user.email "\${gitEmail}"
+        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Create release version of ${module}-${version}" 
+        git push
+        cd -
+        rm -rf \${workDirectory}
+    }
+
+    commitRepo
+    """
+
+}
+
+
+
+private void updateControl2(def version,def  modules) {
+    println "Updating version of modules ${modules} to ${version}"
+
+
+    sh """#!/usr/bin/env bash
+
+    updateControl() {
+        local gitUserName=\$(git config --get user.name)
+        local gitEmail=\$(git config --get user.email)
+        local workDirectory=\$(mktemp -d /tmp/XXXXXXXXXXXX)
+        local puppetFile=Puppetfile
+        git clone -b systest --single-branch git@eid-gitlab.dmz.local:puppet/puppet_control.git \${workDirectory}
+        cd \${workDirectory}
+        for module in ${modules}; do
+        sed -ie "s/\${module}-.*/\${module}-${version}.git'/" \${puppetFile}
+        done
+        git add \${puppetFile}
+        git config --local user.name "\${gitUserName}"
+        git config --local user.email "\${gitEmail}"
+        git commit -m "${env.JOB_NAME} #${env.BUILD_NUMBER}: Updated version of modules ${modules} to ${version}" \${puppetFile}
+        git push
+        cd -
+        rm -rf \${workDirectory}
+    }
+
+    updateControl
+    """
+}
+
+private List<String> moduleNames() {
+    String result = sh(returnStdout: true, script: "[ -e ${WORKSPACE}/puppet_modules ] && find ${WORKSPACE}/puppet_modules -maxdepth 1 -mindepth 1 -type d -exec basename {} \\; || echo -n")
+    if (result.trim().isEmpty())
+        return emptyList()
+    return result.split("\\s+")
+}
+private String flattenList(def list, def prefix ) {
+    flatlist = ''
+    list.each { item ->
+        flatlist = flatlist + prefix + item + ' '
+    }
+    return flatlist
+}

@@ -17,6 +17,8 @@ void script(def params) {
     jira.updateIssuesForManualVerification env.version, env.sourceCodeRepository
     if (params.stagingEnvironmentType == 'puppet') {
         puppet.deploy params.stagingEnvironment, env.version, params.puppetModules, params.librarianModules, params.puppetApplyList
+    } else if (params.stagingEnvironmentType == 'puppet2') {
+            puppet.deploy2 params.stagingEnvironment, env.version, params.puppetModules, params.puppetApplyList
     } else if (params.stagingEnvironmentType == 'docker') {
         dockerClient.deployStack params.stagingEnvironment, params.stackName, env.version
     }
