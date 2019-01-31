@@ -166,7 +166,7 @@ void verify() {
         return
     if (fileExists("${WORKSPACE}/docker/build-images")) {
         echo "Using project specific script to build images"
-        sh "docker/build-images"
+        sh "docker/build-images local verify"
     } else if (fileExists("${WORKSPACE}/docker/build")) {
         echo "Using legacy script to build images"
         sh "docker/build verify"

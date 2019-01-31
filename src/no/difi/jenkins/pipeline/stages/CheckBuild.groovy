@@ -19,8 +19,10 @@ void script(def params) {
     env.sourceCodeRepository = env.GIT_URL
     jira.setSourceCodeRepository env.sourceCodeRepository
     jira.startWork()
-    if (maven.isMavenProject())
+    if (maven.isMavenProject()) {
         maven.verify params.MAVEN_OPTS
+        dockerClient.verify()
+    }
     else
         dockerClient.verify()
 }
