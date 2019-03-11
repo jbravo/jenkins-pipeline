@@ -123,7 +123,9 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
         -Dserviceproviderbackendurl=http://${host}:${servicePorts.get('serviceproviderBackend')}/serviceprovider/\
         -DminIDOnTheFlyUrl=http://${host}:${servicePorts.get('idportenOpenam')}/minid_filegateway/\
         -DseleniumUrl=http://${host}:${servicePorts.get('selenium')}/wd/hub\
-        -Dexternal_baseurl=http://${host}:${servicePorts.get('serviceproviderAPI')}\
+        -Dserviceproviderapiurl=http://${host}:${servicePorts.get('serviceproviderAPI')}\
+        -Doidcproviderurl=http://${host}:${servicePorts.get('idporten-oidc-provider')}\
+        -Dkontaktregisterdburl=http://${host}:${servicePorts.get('kontaktregister-db')}\
         -DdatabaseUrl=${host}:${servicePorts.get('database')}
     """
     cucumber 'system-tests/target/*.json'
