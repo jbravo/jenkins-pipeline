@@ -126,6 +126,9 @@ VerificationTestResult runVerificationTests(def environmentId, def stackName) {
         -Dserviceproviderapiurl=http://${host}:${servicePorts.get('serviceproviderAPI')}\
         -Doidcproviderurl=http://${host}:${servicePorts.get('idporten-oidc-provider')}\
         -Dkontaktregisterdburl=http://${host}:${servicePorts.get('kontaktregister-db')}\
+        -Deventlog-apiurl=http://${host}:${servicePorts.get('eventlog-api')}\
+        -Didporten-authorization-apiurl=http://${host}:${servicePorts.get('idporten-authorization-api')}\
+        -Doppslagstjenesten-resturl=http://${host}:${servicePorts.get('oppslagstjenesten-rest')}\
         -DdatabaseUrl=${host}:${servicePorts.get('database')}
     """
     cucumber 'system-tests/target/*.json'
