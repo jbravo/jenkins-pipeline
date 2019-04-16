@@ -5,13 +5,12 @@ import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.VerificationTestResult
-import no.difi.jenkins.pipeline.Environments
 
 Jira jira
 Git git
 Docker dockerClient
 Maven maven
-Environments environments
+
 
 void script(def params) {
     git.checkoutVerificationBranch()
@@ -23,7 +22,7 @@ void script(def params) {
         if (!result.success())
             error 'Verification tests failed'
     }
-    if (apiTestsSupported(params.verificationEnvironment)) {
+    if (dockerClient.apiTestsSupported(params.verificationEnvironment)) {
         String url= dockerClient.runAPIVerificationTests params.verificationEnvironment, env.stackName
         httpRequest outputFile: 'apitest/results.xml', responseHandle: 'NONE', url: "http://${url}/results.xml"
         junit allowEmptyResults: true, healthScaleFactor: 0.0, testResults: 'apitest/results.xml'
@@ -54,17 +53,3 @@ private void cleanup(def params) {
 }
 
 
-
-
-boolean apiTestsSupported(def environmentId) {
-    if (!environments.isDockerDeploySupported(environmentId)) {
-        echo "No Docker swarm defined for environment '${environmentId}' -- skipping tests"
-        return false
-    }
-    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/stack-api-tests.yml]")
-    if (status != 0){
-        echo "Verification tests are not supported (no /docker/stack-api-tests.yml)"
-        return false
-    }
-    true
-}
