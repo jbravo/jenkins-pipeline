@@ -323,10 +323,11 @@ boolean apiTestsSupported(def environmentId) {
         echo "No Docker swarm defined for environment '${environmentId}' -- skipping tests"
         return false
     }
-    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/stack-api-tests.yml]")
+    int status = sh(returnStatus: true, script: "[ -e ${WORKSPACE}/docker/stack-api-tests.yml ]")
     if (status != 0){
         echo "Verification tests are not supported (no /docker/stack-api-tests.yml)"
         return false
     }
+
     true
 }
