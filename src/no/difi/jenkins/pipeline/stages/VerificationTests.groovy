@@ -5,11 +5,13 @@ import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Maven
 import no.difi.jenkins.pipeline.VerificationTestResult
+import no.difi.jenkins.pipeline.Environments
 
 Jira jira
 Git git
 Docker dockerClient
 Maven maven
+Environments environments
 
 void script(def params) {
     git.checkoutVerificationBranch()
