@@ -52,7 +52,7 @@ String deployStack(def environmentId, def stackName, def version) {
     stackName
 }
 
-String deployAPITests(def environmentId, def stackName, def version){
+String runAPIVerificationTests(def environmentId, def stackName){
     String dockerHostFile = newDockerHostFile()
     String dockerHost = dockerHost dockerHostFile
     String sshKey = environments.dockerSwarmSshKey(environmentId)
@@ -65,7 +65,6 @@ String deployAPITests(def environmentId, def stackName, def version){
         export DOCKER_TLS_VERIFY=
         export DOCKER_HOST=${dockerHost}
         export REGISTRY=${registryAddress}
-        export VERSION=${version}
         rc=1
         docker stack deploy -c docker/stack-api-tests.yml ${stackName} || { >&2 echo "Failed to deploy api-tests-stack"; exit 1; }
         for i in \$(seq 1 100); do
@@ -75,12 +74,12 @@ String deployAPITests(def environmentId, def stackName, def version){
             echo "\${output}" | grep -v 'Hit CTRL-C to stop the server' || { rc=0; echo "Api Tests finished"; break; }
             echo "Api Tests not finished"
         done
-        rm ${dockerHostFile}
         echo "Exiting with status \${rc}"
         exit \${rc}
         """
     }
-    port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{with index .Endpoint.Ports 0}}{{.PublishedPort}}{{end}}' idporten-authorization-api_newman ${stackName}_newman").trim()
+    port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{with index .Endpoint.Ports 0}}{{.PublishedPort}}{{end}}' ${stackName}_newman").trim()
+    sh "rm ${dockerHostFile}"
     return host+":"+port
 }
 

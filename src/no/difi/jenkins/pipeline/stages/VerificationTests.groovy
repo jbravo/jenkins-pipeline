@@ -28,9 +28,6 @@ void script(def params) {
         junit allowEmptyResults: true, healthScaleFactor: 0.0, testResults: 'apitest/results.xml'
         httpRequest outputFile: 'apitest/results.html', responseHandle: 'NONE', url: "http://${url}/results.html"
         publishHTML([allowMissing: true, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'apitest', reportFiles: 'results.html', reportName: 'Api Tests', reportTitles: ''])
-        jira.addComment(
-                "Api Verifikasjonstester utført: [Rapport|${result.reportUrl()}] og [byggstatus|${env.BUILD_URL}]",
-        )
     }
 }
 
