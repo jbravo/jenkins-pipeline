@@ -52,6 +52,38 @@ String deployStack(def environmentId, def stackName, def version) {
     stackName
 }
 
+String deployAPITests(def environmentId, def stackName, def version){
+    String dockerHostFile = newDockerHostFile()
+    String dockerHost = dockerHost dockerHostFile
+    String sshKey = environments.dockerSwarmSshKey(environmentId)
+    String user = environments.dockerSwarmUser(environmentId)
+    String host = environments.dockerSwarmHost(environmentId)
+    String registryAddress = environments.dockerRegistryAddress(environmentId)
+    setupSshTunnel(sshKey, dockerHostFile, user, host)
+    if (fileExists("${WORKSPACE}/docker/stack-api-tests.yml")) {
+        sh """#!/usr/bin/env bash
+        export DOCKER_TLS_VERIFY=
+        export DOCKER_HOST=${dockerHost}
+        export REGISTRY=${registryAddress}
+        export VERSION=${version}
+        rc=1
+        docker stack deploy -c docker/stack-api-tests.yml ${stackName} || { >&2 echo "Failed to deploy api-tests-stack"; exit 1; }
+        for i in \$(seq 1 100); do
+            sleep 5
+            output=\$(docker service logs ${stackName}_newman --tail 1) || { rc=1; >&2 echo "Failed to get log: \${output}"; break; }
+            [[ -z "\${output}" ]] && { echo "No log available"; continue; }
+            echo "\${output}" | grep -v 'Hit CTRL-C to stop the server' || { rc=0; echo "Api Tests finished"; break; }
+            echo "Api Tests not finished"
+        done
+        rm ${dockerHostFile}
+        echo "Exiting with status \${rc}"
+        exit \${rc}
+        """
+    }
+    port = sh(returnStdout: true, script: "DOCKER_TLS_VERIFY= DOCKER_HOST=${dockerHost} docker service inspect --format='{{with index .Endpoint.Ports 0}}{{.PublishedPort}}{{end}}' idporten-authorization-api_newman ${stackName}_newman").trim()
+    return host+":"+port
+}
+
 void removeStack(def environmentId, def stackName) {
     if (!environments.isDockerDeploySupported(environmentId)) {
         echo "No Docker stack to remove"
