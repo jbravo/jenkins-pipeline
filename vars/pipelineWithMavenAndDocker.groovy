@@ -2,6 +2,7 @@ import no.difi.jenkins.pipeline.Components
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Docker
 import no.difi.jenkins.pipeline.Git
+import no.difi.jenkins.pipeline.DependencyTrack
 
 def call(body) {
     String projectName = JOB_NAME.tokenize('/')[0]
@@ -9,6 +10,7 @@ def call(body) {
     Jira jira = components.jira
     Docker dockerClient = components.docker
     Git git = components.git
+    DependencyTrack dependencyTrack = components.dependencyTrack
     String agentImage = 'difi/jenkins-agent'
     String agentArgs = '--mount type=volume,src=pipeline-maven-repo-cache,dst=/root/.m2/repository ' +
             '--network pipeline_pipeline ' +
@@ -514,6 +516,9 @@ def call(body) {
                     script {
                         jira.close env.version, env.sourceCodeRepository
                         git.deleteWorkBranch()
+                        if (params.enableDependencyTrack) {
+                            dependencyTrack.deleteProject(env.JOB_NAME)
+                        }
                     }
                 }
             }

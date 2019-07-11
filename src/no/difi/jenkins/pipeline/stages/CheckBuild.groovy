@@ -5,12 +5,14 @@ import no.difi.jenkins.pipeline.ErrorHandler
 import no.difi.jenkins.pipeline.Git
 import no.difi.jenkins.pipeline.Jira
 import no.difi.jenkins.pipeline.Maven
+import no.difi.jenkins.pipeline.DependencyTrack
 
 ErrorHandler errorHandler
 Git git
 Jira jira
 Docker dockerClient
 Maven maven
+DependencyTrack dependencyTrack
 
 void script(def params) {
     if (git.isIntegrated(jira.issueId()))
@@ -20,6 +22,11 @@ void script(def params) {
     jira.setSourceCodeRepository env.sourceCodeRepository
     jira.startWork()
     if (maven.isMavenProject()) {
+        if (params.enableDependencyTrack) {
+            dtProjectId = dependencyTrack.getProjectID(env.JOB_NAME)
+            maven.cycloneDX()
+            dependencyTrackPublisher artifact: 'target/bom.xml', artifactType: 'bom', projectId: dtProjectId, failedTotalCritical: 0, failedTotalHigh: 2, failedTotalLow: 20, failedTotalMedium: 10, synchronous: true
+        }
         maven.verify params.MAVEN_OPTS
         dockerClient.verify()
     }

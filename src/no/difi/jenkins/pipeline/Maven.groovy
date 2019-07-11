@@ -27,6 +27,14 @@ void verify(def options) {
         errorHandler.trigger "Maven build failed (exit code ${status})"
 }
 
+void cycloneDX() {
+    int status = sh returnStatus: true, script: """
+        mvn org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom -B 
+    """
+    if (status != 0)
+        errorHandler.trigger "cyclonedx failed (exit code ${status})"
+}
+
 void deliver(
         def version, def mavenOptions, def parallel, def environmentId
 ) {

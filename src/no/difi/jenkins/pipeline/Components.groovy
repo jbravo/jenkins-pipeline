@@ -31,6 +31,7 @@ class Components {
     Jira jira
     Maven maven
     Puppet puppet
+    DependencyTrack dependencyTrack
     CheckBuild checkBuild
     WaitForVerificationToStart waitForVerificationToStart
     PrepareVerification prepareVerification
@@ -72,6 +73,9 @@ class Components {
         maven.environments = environments
         maven.docker = docker
         maven.errorHandler = errorHandler
+        dependencyTrack = new DependencyTrack()
+        dependencyTrack.errorHandler = errorHandler
+        dependencyTrack.environments = environments
         puppet = new Puppet()
         puppet.environments = environments
         checkBuild = new CheckBuild()
@@ -80,6 +84,7 @@ class Components {
         checkBuild.jira = jira
         checkBuild.dockerClient = docker
         checkBuild.maven = maven
+        checkBuild.dependencyTrack = dependencyTrack
         waitForVerificationToStart = new WaitForVerificationToStart()
         waitForVerificationToStart.jira = jira
         prepareVerification = new PrepareVerification()
