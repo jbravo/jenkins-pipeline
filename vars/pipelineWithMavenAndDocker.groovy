@@ -74,6 +74,18 @@ def call(body) {
                         components.checkBuild.script(params)
                     }
                 }
+                post {
+                    failure {
+                        script {
+                            components.checkBuild.failureScript()
+                        }
+                    }
+                    aborted {
+                        script {
+                            components.checkBuild.abortedScript()
+                        }
+                    }
+                }
             }
             stage('Wait for code reviewer') {
                 when {

@@ -26,10 +26,27 @@ void script(def params) {
             dtProjectId = dependencyTrack.getProjectID(env.JOB_NAME)
             maven.cycloneDX()
             dependencyTrackPublisher artifact: 'target/bom.xml', artifactType: 'bom', projectId: dtProjectId, failedTotalCritical: 0, failedTotalHigh: 2, failedTotalLow: 20, failedTotalMedium: 10, synchronous: true
+            if (currentBuild.result == "FAILURE") {
+                env.errorMessage = "DependencyTrack check failed, Vulnerability thresholds exceed"
+            }
         }
         maven.verify params.MAVEN_OPTS
         dockerClient.verify()
     }
     else
         dockerClient.verify()
+}
+
+void failureScript() {
+    cleanup()
+    jira.addFailureComment()
+}
+
+void abortedScript() {
+    cleanup()
+    jira.addAbortedComment()
+}
+
+private void cleanup() {
+    jira.resumeWork()
 }
