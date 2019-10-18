@@ -255,7 +255,7 @@ private void push(String registryAddress, String imageName, def tag, def usernam
     echo "Tagging image ${pushAddress}/${imageName}:${tag} with tag 'latest'..."
     docker tag ${pushAddress}/${imageName}:${tag} ${pushAddress}/${imageName}
     echo "Pushing image ${pushAddress}/${imageName}:latest..."
-    docker push ${pushAddress}/${imageName} || { >&2 echo "Failed to push tag 'latest' for image ${imageName}"; exit 1; }
+    docker push ${pushAddress}/${imageName}:latest || { >&2 echo "Failed to push tag 'latest' for image ${imageName}"; exit 1; }
     echo "Logging out from registry ${registryAddress}..."
     docker logout ${loginAddress}; exit 0
     """
