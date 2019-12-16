@@ -7,8 +7,7 @@ Git git
 Jira jira
 
 void script() {
-    echo "Waiting for approval..."
-    if (!jira.waitUntilManualVerificationIsFinishedAndAssertSuccess(env.sourceCodeRepository)) return
+    echo "No more waiting for approval of other issues, closing issue..."
     String fixVersions = jira.fixVersions()
     if (fixVersions && !fixVersions.contains(env.version)) {
         env.verification = 'false'
